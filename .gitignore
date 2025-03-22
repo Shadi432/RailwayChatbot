@@ -11,6 +11,11 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+
+# Generated Files 
+data.gzip
+
 
 # Editor directories and files
 .vscode/*
