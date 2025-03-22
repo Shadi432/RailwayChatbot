@@ -13,6 +13,9 @@ dist-ssr
 *.local
 .env
 
+# Python venv
+BackEnd/venv
+
 # Generated Files 
 data.gzip
 

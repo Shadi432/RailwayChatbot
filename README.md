@@ -7,8 +7,13 @@ After cloning the repository, initialise the front-end and back-end by going int
 I'm using Python version 3.12.3, if the code doesn't work with your python version make sure to tell the team.
 Also you need to install these python libraries through pip:
 
+### Dependencies
 Dot-Env - For allowing the .env files to work. 
 ```pip install python-dotenv```
+
+
+It's recommended to use a python virtualenv so that the modules aren't all installed systemwide which could lead to errors. [VEnv Post](https://stackoverflow.com/questions/41972261/what-is-a-virtualenv-and-why-should-i-use-one)
+
 
 ## Instructions for Running the project
 
