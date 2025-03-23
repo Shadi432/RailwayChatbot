@@ -16,8 +16,9 @@ dist-ssr
 # Python venv
 BackEnd/venv
 
-# Generated Files 
+# Generated Webscraping Files
 data.gzip
+trainUpdates.dat
 
 
 # Editor directories and files
