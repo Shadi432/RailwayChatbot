@@ -11,6 +11,15 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+
+# Python venv
+BackEnd/venv
+
+# Generated Webscraping Files
+data.gzip
+trainUpdates.dat
+
 
 # Editor directories and files
 .vscode/*
