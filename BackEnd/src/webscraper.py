@@ -44,11 +44,3 @@ ftp.quit()
 
 ungzipFile(ZIPPED_OUTPUT_NAME, DATA_OUTPUT_NAME)
 
-# Loop through this file and for each line I need to turn it into xml, extract specific fields then send them to the db.
-with open(DATA_OUTPUT_NAME, "r+") as file:
-    for line in file:
-        root = et.fromstring(line)
-        
-        for child in root:
-            print(child.tag, child.attrib) 
-# Storing results in a database by running the right program via command line and passing the data as an argument.

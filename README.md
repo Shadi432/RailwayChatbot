@@ -29,6 +29,9 @@ A .env file will need to be made in the root directory of the BackEnd and it'll 
     FTP_PASSWORD=passwordhere
 ```
 
+### Generating the latest Darwin file
+If you use the command ```python python BackEnd/src/webscraper.py``` to run the webscraper you'll generate a trainUpdates.dat file which will include the xml records that darwin provides.
+
 # Adding to the project
 Make sure to put all new features into the src folders and it should be fine, as long as the file is labelled nicely.
 
