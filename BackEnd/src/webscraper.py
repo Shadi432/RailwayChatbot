@@ -5,10 +5,14 @@ from dotenv import load_dotenv
 import os
 import shutil
 import xml.etree.ElementTree as et
+import concurrent.futures
+import time
 
 load_dotenv()
 
 MINUTE = 60
+DARWIN_PULL_INTERVAL = 5*MINUTE
+RUNTIME_LENGTH_MINUTES = 1
 ZIPPED_OUTPUT_NAME = "data.gzip"
 DATA_OUTPUT_NAME = "trainUpdates.dat"
 
@@ -17,8 +21,24 @@ FTP_HOSTNAME = os.getenv("FTP_HOSTNAME")
 FTP_USERNAME = os.getenv("FTP_USERNAME")
 FTP_PASSWORD = os.getenv("FTP_PASSWORD")
 
-ftp = ftplib.FTP(FTP_HOSTNAME, FTP_USERNAME, FTP_PASSWORD)
-ftp.cwd("pushport")
+# Get most recent file in pushport and writes it to filesystem
+def getMostRecentDarwinFile():
+    ftp = ftplib.FTP(FTP_HOSTNAME, FTP_USERNAME, FTP_PASSWORD)
+    ftp.cwd("pushport")
+
+    for filename in ftp.nlst():
+        # Stripping out the date time from the filenames
+        timeCreated = datetime.datetime.fromisoformat(filename[14:-3])
+        currentTime = datetime.datetime.now()
+        timeDifference = currentTime - timeCreated
+        # 7 Minutes because files are uploaded to Darwin in roughly 5 minute intervals so sometimes 6 minute gaps will exist.
+        if timeDifference.seconds < 7*MINUTE:
+            with open(ZIPPED_OUTPUT_NAME, "wb") as file:
+                # Writing the contents to a file
+                ftp.retrbinary(f"RETR {filename}", file.write)
+                break
+
+    ftp.quit()
 
 # Unzips then deletes a gzip
 def ungzipFile(zippedFilename, outputFilename):
@@ -27,20 +47,38 @@ def ungzipFile(zippedFilename, outputFilename):
             shutil.copyfileobj(file_in,file_out)
     os.remove(zippedFilename)
 
-# Get most recent file in pushport
-for filename in ftp.nlst():
-    # Stripping out the date time from the filenames
-    timeCreated = datetime.datetime.fromisoformat(filename[14:-3])
-    currentTime = datetime.datetime.now()
-    timeDifference = currentTime - timeCreated
-    # 7 Minutes because files are uploaded to Darwin in roughly 5 minute intervals so sometimes 6 minute gaps will exist.
-    if timeDifference.seconds < 7*MINUTE:
-        with open(ZIPPED_OUTPUT_NAME, "wb") as file:
-            # Writing the contents to a file
-            ftp.retrbinary(f"RETR {filename}", file.write)
-            break
 
-ftp.quit()
+def job():
+    getMostRecentDarwinFile()
+    ungzipFile(ZIPPED_OUTPUT_NAME, DATA_OUTPUT_NAME)
 
-ungzipFile(ZIPPED_OUTPUT_NAME, DATA_OUTPUT_NAME)
 
+endTime = datetime.datetime.now() + datetime.timedelta(minutes=RUNTIME_LENGTH_MINUTES)
+
+while endTime > datetime.datetime.now():
+    # Pass off the job to another processor 
+    with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
+        startTime = datetime.datetime.now()
+        future = executor.submit(job)
+        endTime = datetime.datetime.now()
+        diff = endTime-startTime
+        print(diff)
+
+    print("finished")
+    time.sleep(DARWIN_PULL_INTERVAL)
+print("stopped")
+
+
+""" 
+count = 0
+with open(DATA_OUTPUT_NAME, "r+") as file:
+    for line in file:
+        count += 1
+
+        # If a <OW> tag appears then Darwin line breaks which breaks up the XML, so this checks we have a properly formed Darwin line.
+        if "<Pport" in line and "</Pport>" in line:
+            root = et.fromstring(line)
+        
+            # Only operate on this root if it is a valid element.
+            print(f"{root[0][0].tag} : {count}")
+ """
