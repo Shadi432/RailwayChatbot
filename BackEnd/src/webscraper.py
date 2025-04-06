@@ -23,21 +23,28 @@ FTP_PASSWORD = os.getenv("FTP_PASSWORD")
 
 # Get most recent file in pushport and writes it to filesystem
 def getMostRecentDarwinFile():
-    ftp = ftplib.FTP(FTP_HOSTNAME, FTP_USERNAME, FTP_PASSWORD)
-    ftp.cwd("pushport")
-    
-    for filename in ftp.nlst():
-        # Stripping out the date time from the filenames - Darwin runs on UTC all year round
-        timeCreated = datetime.datetime.fromisoformat(filename[14:-3]).astimezone(datetime.timezone.utc)
-        currentTime = datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(hours=1)
-        timeDifference = currentTime - timeCreated
-        # 7 Minutes because files are uploaded to Darwin in roughly 5 minute intervals so sometimes 6 minute gaps will exist.
-        if timeDifference.seconds < 7*MINUTE:
-            with open(ZIPPED_OUTPUT_NAME, "wb") as file:
-                # Writing the contents to a file
-                ftp.retrbinary(f"RETR {filename}", file.write)
-                break
-    ftp.quit()
+    # Verifying if all the credentials are in the env file
+    if (FTP_HOSTNAME and FTP_USERNAME and FTP_PASSWORD):
+        # If lines below this one aren't running it's because the credentials are incorrect check the NRDP website.
+        ftp = ftplib.FTP(FTP_HOSTNAME, FTP_USERNAME, FTP_PASSWORD)
+        ftp.cwd("pushport")
+        
+        for filename in ftp.nlst():
+            print("This not happening")
+            # Stripping out the date time from the filenames - Darwin runs on UTC all year round
+            timeCreated = datetime.datetime.fromisoformat(filename[14:-3]).astimezone(datetime.timezone.utc)
+            currentTime = datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(hours=1)
+            timeDifference = currentTime - timeCreated
+            # 7 Minutes because files are uploaded to Darwin in roughly 5 minute intervals so sometimes 6 minute gaps will exist.
+            if timeDifference.seconds < 7*MINUTE:
+                with open(ZIPPED_OUTPUT_NAME, "wb") as file:
+                    # Writing the contents to a file
+                    ftp.retrbinary(f"RETR {filename}", file.write)
+                    break
+        ftp.quit()
+    else:
+        print(f"""The credentials in the .env file are not filled in. Check the readme for details.
+            FTP_HOSTNAME: {FTP_HOSTNAME}, FTP_USERNAME: {FTP_USERNAME}, FTP_PASSWORD: {FTP_PASSWORD}""")
 
 # Unzips then deletes a gzip
 def ungzipFile(zippedFilename, outputFilename):
@@ -82,9 +89,10 @@ def processXML():
                     for schedule in schedulesFound:
                         print("Stub")
                         if firstRid == None:
+                            print("Stub")
                             # rid = this
-                    # Submit to DB
-                            
+
+                        # Submit to DB func with firstRid as none being possible      
                 # Log deactivated trains
                 elif deactivatedFound != None:
                     print("Stub 3")
