@@ -7,6 +7,7 @@ import shutil
 import xml.etree.ElementTree as et
 import concurrent.futures
 import time
+import pyodbc
 
 load_dotenv()
 
@@ -15,11 +16,16 @@ DARWIN_PULL_INTERVAL = 5*MINUTE
 RUNTIME_LENGTH_MINUTES = 1
 ZIPPED_OUTPUT_NAME = "data.gzip"
 DATA_OUTPUT_NAME = "trainUpdates.dat"
+# Index of the end <PPort> and <Ur> tags that aren't necessary
+SUFFIX_TAG_INDEX = -14
+RID_LENGTH = 15
 
 # Credentials for accessing the FTP server
 FTP_HOSTNAME = os.getenv("FTP_HOSTNAME")
 FTP_USERNAME = os.getenv("FTP_USERNAME")
 FTP_PASSWORD = os.getenv("FTP_PASSWORD")
+
+
 
 # Get most recent file in pushport and writes it to filesystem
 def getMostRecentDarwinFile():
@@ -29,13 +35,14 @@ def getMostRecentDarwinFile():
         ftp = ftplib.FTP(FTP_HOSTNAME, FTP_USERNAME, FTP_PASSWORD)
         ftp.cwd("pushport")
         
+        # Need a check here for if ftp.nlst doesn't return stuff because that's a bug based on DARWIN's timing
         for filename in ftp.nlst():
-            print("This not happening")
             # Stripping out the date time from the filenames - Darwin runs on UTC all year round
             timeCreated = datetime.datetime.fromisoformat(filename[14:-3]).astimezone(datetime.timezone.utc)
             currentTime = datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(hours=1)
             timeDifference = currentTime - timeCreated
             # 7 Minutes because files are uploaded to Darwin in roughly 5 minute intervals so sometimes 6 minute gaps will exist.
+            
             if timeDifference.seconds < 7*MINUTE:
                 with open(ZIPPED_OUTPUT_NAME, "wb") as file:
                     # Writing the contents to a file
@@ -64,39 +71,36 @@ def processXML():
     # count = 0
     # tsCount = 0
     # scheduleCount = 0
+    
     with open(DATA_OUTPUT_NAME, "r+") as file:
         for line in file:
-            count += 1
-
             # If a <OW> tag appears then Darwin line breaks which breaks up the XML, so this checks we have a properly formed Darwin line.
             if "<Pport" in line and "</Pport>" in line:
-                root = et.fromstring(line)
-                # Handling the XML Namespace that Darwin uses. Read ElementTree Documentation for reference
-                namespace = {"namespace": root.tag[1:-6]}
+                targetTags = ["TS", "schedule", "deactivated"] 
+                
+                # Match the target tags to the current line of XML and if there snip the data within
+                for tag in targetTags:
+                    # The " r" is needed because of the scheduleFormations tag which means schedule will match to that too. This makes the code work for all cases.                    
+                    tagPosition = line.find(f"<{tag} r")
+                    data = line[tagPosition:SUFFIX_TAG_INDEX]
+                    if data != "":
+                        relatedRid = ""
+                        ridIndex = data.find("rid")
+                        # 5 needs to be added since find finds the start of the word rid
+                        rid = data[ridIndex+5: ridIndex+RID_LENGTH+5]
+                        if tag == "schedule":
+                            # In the case of a train taking up the schedule of another the program needs to split the line into both separate schedules
+                            schedules = data.split("schedule>", 1)
+                            # There will always be two elements in the schedules list due to how .split works.
+                            
+                            if schedules[1] != "":
+                                relatedRidIndex = schedules[1].find("rid")
+                                # 5 needs to be added since find finds the start of the word rid
+                                relatedRid = schedules[1][relatedRidIndex+5: relatedRidIndex+RID_LENGTH+5]
 
-                trainStatusesFound = root[0].find("namespace:TS", namespace)
-                schedulesFound = root[0].findall("namespace:schedule", namespace)
-                deactivatedFound = root[0].find("namespace:deactivated", namespace)
-                if trainStatusesFound != None:
-                    print("Stub 1")
-                    # Want to submit data to the 2 tables in the db.
-                elif len(schedulesFound) == 1:
-                    for schedule in schedulesFound:
-                        print("Stub 2")
-                        # Submit data to db. 
-                elif len(schedulesFound) == 2:
-                    firstRid = None
-                    for schedule in schedulesFound:
-                        print("Stub")
-                        if firstRid == None:
-                            print("Stub")
-                            # rid = this
-
-                        # Submit to DB func with firstRid as none being possible      
-                # Log deactivated trains
-                elif deactivatedFound != None:
-                    print("Stub 3")
-                    # Submit data to the db
+                        
+                        sendTrainDataToDB(rid, tag, data, relatedRid)
+                        
 
 def job():
     getMostRecentDarwinFile()
