@@ -116,22 +116,23 @@ def job():
     # Cleanup UNCOMMENT FOR FINAL VERSION
     # os.remove(DATA_OUTPUT_NAME)
 
-# Init for testing so that file remains after program execution for inspection
-if os.path.isfile(DATA_OUTPUT_NAME):
-    os.remove(DATA_OUTPUT_NAME)
+if __name__ == '__main__':
+    # Init for testing so that file remains after program execution for inspection
+    if os.path.isfile(DATA_OUTPUT_NAME):
+        os.remove(DATA_OUTPUT_NAME)
 
-endTime = datetime.datetime.now() + datetime.timedelta(minutes=RUNTIME_LENGTH_MINUTES)
+    endTime = datetime.datetime.now() + datetime.timedelta(minutes=RUNTIME_LENGTH_MINUTES)
 
-while endTime > datetime.datetime.now():
-    # Pass off the job to another processor 
-    with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
-        startTime = datetime.datetime.now()
-        future = executor.submit(job)
-        endTime = datetime.datetime.now()
-        diff = endTime-startTime
+    while endTime > datetime.datetime.now():
+        # Pass off the job to another processor 
+        with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
+            startTime = datetime.datetime.now()
+            future = executor.submit(job)
+            endTime = datetime.datetime.now()
+            diff = endTime-startTime
 
-    print("finished")
-    time.sleep(DARWIN_PULL_INTERVAL)
-print("stopped")
+        print("finished")
+        time.sleep(DARWIN_PULL_INTERVAL)
+    print("stopped")
 
 
