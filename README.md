@@ -23,6 +23,28 @@ It's recommended to use a python virtualenv so that the modules aren't installed
 #### Required Libraries
 Dot-Env - For allowing the .env files to work. 
 ```pip install python-dotenv```
+```pip install pyodbc```
+
+#### SQL Server 2017 Database
+
+[Tutorial](https://www.quackit.com/sql_server/sql_server_2017/tutorial/)
+To set this up you want to download SQL Server 2017 [Download Page](https://www.mssqltips.com/sqlservertip/6429/sql-server-download-quick-links/)
+
+You do want to download the database management software to allow you to interact with the database.
+
+You want to connect to the database using Windows Authentication not SQL Login.
+
+You want to download the ODBC Driver 17 for Visual Studio.
+
+[Set Up Guide](https://github.com/mkleehammer/pyodbc/wiki)
+You want to make a DSN and title it TrainDB.
+
+The servername should be localhost.
+
+From there the server should work.
+
+
+
 
 
 ## Instructions for Running the project
