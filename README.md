@@ -21,9 +21,15 @@ A .env file will need to be made in the root directory of the BackEnd and it'll 
 It's recommended to use a python virtualenv so that the modules aren't installed systemwide which could lead to errors. [VEnv Post](https://stackoverflow.com/questions/41972261/what-is-a-virtualenv-and-why-should-i-use-one)
 
 #### Required Libraries
+
+##### For the DARWIN scraper
 Dot-Env - For allowing the .env files to work. 
 ```pip install python-dotenv```
 ```pip install pyodbc```
+
+##### For chatbot
+```pip install numpy```
+```pip install scikit-learn```
 
 #### SQL Server 2017 Database
 

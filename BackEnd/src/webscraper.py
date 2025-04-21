@@ -13,7 +13,7 @@ load_dotenv()
 
 MINUTE = 60
 DARWIN_PULL_INTERVAL = 5*MINUTE
-RUNTIME_LENGTH_MINUTES = 120
+RUNTIME_LENGTH_MINUTES = 180
 ZIPPED_OUTPUT_NAME = "data.gzip"
 DATA_OUTPUT_NAME = "trainUpdates.dat"
 # Index of the end <PPort> and <Ur> tags that aren't necessary
@@ -178,7 +178,6 @@ if __name__ == '__main__':
                     DataField4 varchar(4000),
                     DataField5 varchar(4000));"""
             cursor.execute(f"{DELETE_ALL_TABLES_QUERY};{CREATE_ALL_TABLES_QUERY};")
-            print("test")
             # Need everything cleared out here, all table data removed.
     except pyodbc.Error as ex:
         print(ex)
