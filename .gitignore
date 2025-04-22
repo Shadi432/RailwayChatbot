@@ -14,7 +14,7 @@ dist-ssr
 .env
 
 # Chatbot
-BackEnd/chatbot
+BackEnd/src/chatbot
 
 # Python venv
 BackEnd/venv

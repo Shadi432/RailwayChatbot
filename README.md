@@ -58,9 +58,11 @@ From there the server should work.
 To run the front-end or the back-end to test your changes, go to the respective directory then run
 `npm run dev`
 
+### Running the webscraper
+To run the webscraper in the backend you can just call the function getFareInfo()
 
 ### Generating the latest Darwin file
-If you use the command ```python python BackEnd/src/webscraper.py``` to run the webscraper you'll generate a trainUpdates.dat file which will include the xml records that darwin provides.
+If you use the command ```python python BackEnd/src/darwinPull.py``` you'll generate a trainUpdates.dat file which will include the xml records that darwin provides. It won't work unless you have a Microsoft SQL Server set up for the data to be funnelled into.
 
 # Adding to the project
 Make sure to put all new features into the src folders and it should be fine, as long as the file is labelled nicely.
