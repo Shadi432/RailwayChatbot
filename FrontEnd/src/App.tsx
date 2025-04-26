@@ -1,35 +1,58 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useState } from 'react';
+import './App.css';
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [userInput, setUserInput] = useState('');
+  const [botResponse, setBotResponse] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!userInput.trim()) return;
+
+    setLoading(true);
+
+    try {
+      const response = await fetch('http://localhost:5000/chatbot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: userInput }),
+      });
+
+      const data = await response.json();
+      setBotResponse(data.response || 'No response from server.');
+    } catch (error) {
+      console.error('Fetch error:', error);
+      setBotResponse('Error communicating with server.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <div className="chatbot-container">
+      <h1>Train Delay Chatbot</h1>
+
+      <input
+        type="text"
+        value={userInput}
+        onChange={(e) => setUserInput(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') handleSubmit();
+        }}
+        placeholder="Type something like: delay from Norwich to London at 9am tomorrow"
+      />
+
+      <button onClick={handleSubmit} disabled={loading}>
+        {loading ? 'Thinking...' : 'Ask'}
+      </button>
+
+      <div className="response-box">
+        {botResponse && (
+          <p><strong>Bot:</strong> {botResponse}</p>
+        )}
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    </div>
+  );
 }
 
-export default App
+export default App;

@@ -1,9 +1,7 @@
 import random
-import re
 from train_chatbot import predict_delay_from_input
 from extra_features import get_train_crowd_info, get_random_weather
 
-# Predefined intents:
 intents = {
     "intents": [
         {
@@ -28,10 +26,7 @@ intents = {
         },
         {
             "tag": "delay_prediction",
-            "patterns": [
-                "train delay", "will my train be late", "predict delay", "delay prediction",
-                "delay from", "any delay between", "delay info", "late train"
-            ],
+            "patterns": ["train delay", "will my train be late", "predict delay", "delay prediction", "what is the delay"],
             "responses": []
         }
     ]
@@ -39,7 +34,7 @@ intents = {
 
 
 def match_intent(user_input):
-    """Match the user input to an intent tag."""
+    """Find matching intent from the user input."""
     user_input = user_input.lower()
     for intent in intents["intents"]:
         for pattern in intent["patterns"]:
@@ -52,48 +47,25 @@ def match_intent(user_input):
     return "unknown"
 
 
-def extract_train_info(text):
-    """Try to extract from/to, time, and day."""
-    pattern = r"from\s+(\w+)\s+to\s+(\w+).*?at\s+(\d{1,2}:\d{2}).*?on\s+(\w+)"
-    match = re.search(pattern, text.lower())
-    if match:
-        return {
-            "origin": match.group(1).capitalize(),
-            "destination": match.group(2).capitalize(),
-            "time": match.group(3),
-            "day": match.group(4).capitalize()
-        }
-    return None
-
-
 def generate_response(user_input):
-    """Generate a response based on user input."""
+    """Generate a response based on the detected intent."""
     intent_tag = match_intent(user_input)
 
-    if intent_tag == "greeting":
-        return random.choice([i["responses"] for i in intents["intents"] if i["tag"] == "greeting"][0])
-    elif intent_tag == "goodbye":
-        return random.choice([i["responses"] for i in intents["intents"] if i["tag"] == "goodbye"][0])
-    elif intent_tag == "thanks":
-        return random.choice([i["responses"] for i in intents["intents"] if i["tag"] == "thanks"][0])
-    elif intent_tag == "name":
-        return random.choice([i["responses"] for i in intents["intents"] if i["tag"] == "name"][0])
-
+    if intent_tag in {"greeting", "goodbye", "thanks", "name"}:
+        intent_data = next(i for i in intents["intents"] if i["tag"] == intent_tag)
+        response = random.choice(intent_data["responses"])
     elif intent_tag == "delay_prediction":
-        train_info = extract_train_info(user_input)
-        if train_info:
-            weather = get_random_weather()
-            delay = predict_delay_from_input(user_input, weather)
-            advice = get_train_crowd_info(user_input, weather)
-            return f"{delay}\n{advice}" if advice else delay
-        else:
-            return "Sorry, I couldn't extract the train journey details. Please use the format: 'from [origin] to [destination] at HH:MM on DAY'."
-
+        weather = get_random_weather()
+        response = predict_delay_from_input(user_input, weather)
+        extra_info = get_train_crowd_info(user_input, weather)
+        if extra_info:
+            response += "\n" + extra_info
     else:
-        return "Sorry, I don't understand. You can ask me things like:\n'predict delay from Norwich to London at 17:00 on Friday'"
+        response = "Sorry, I don't understand."
+
+    return response
 
 
-# Run chatbot
 if __name__ == "__main__":
     print("Chatbot Test Mode (type 'exit' to stop)")
     while True:
