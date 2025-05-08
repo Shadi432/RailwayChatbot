@@ -17,7 +17,7 @@ async function getFareInfo(originStation: string, destinationStation: string) {
   try {
     await driver.manage().setTimeouts({ implicit: 2000 });
     await driver.get(LINK_BR_FARES);
-    
+
     // Appears over the content the first time you open the site.
     const PersonalDataConsentButton = await driver.findElement(By.css("body > div.fc-consent-root > div.fc-dialog-container > div.fc-dialog.fc-choice-dialog > div.fc-footer-buttons-container > div.fc-footer-buttons > button.fc-button.fc-cta-consent.fc-primary-button"));
 
@@ -30,7 +30,7 @@ async function getFareInfo(originStation: string, destinationStation: string) {
     await OriginField.sendKeys(originStation);
     await DestinationField.sendKeys(destinationStation);
     await QueryFaresButton.click();
-      
+
     // Pulling Info from the query results
     const StandardFareTable: WebElement = await driver.findElement(By.id(WALK_UP_STANDARD_ID));
     const FareRowsData: WebElement[] = await StandardFareTable.findElements(By.tagName("tr"));
@@ -49,7 +49,7 @@ async function getFareInfo(originStation: string, destinationStation: string) {
             const ticketTypeData: string = await FareRowsData[i+j].findElement(By.tagName("td")).getText()
             const ticketType: string = ticketTypeData.split("\n")[0];
             // Ticket type this is used to index the array and then have a dictionary with "Adult and Child" for each ticket type
-            
+
             journeyData[ticketType] = {};
             for (let adultChild of ticketFor){
               // Gets the parent of an element

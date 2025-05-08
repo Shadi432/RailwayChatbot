@@ -2,6 +2,8 @@ import random
 import re
 from train_chatbot import predict_delay_from_input
 from extra_features import get_train_crowd_info, get_random_weather
+from nlpprocessor import JourneyExtractor
+
 
 # Predefined intents:
 intents = {
@@ -37,6 +39,8 @@ intents = {
     ]
 }
 
+journey_extractor = JourneyExtractor()
+
 
 def match_intent(user_input):
     """Match the user input to an intent tag."""
@@ -53,17 +57,30 @@ def match_intent(user_input):
 
 
 def extract_train_info(text):
-    """Try to extract from/to, time, and day."""
-    pattern = r"from\s+(\w+)\s+to\s+(\w+).*?at\s+(\d{1,2}:\d{2}).*?on\s+(\w+)"
-    match = re.search(pattern, text.lower())
-    if match:
+    """Extract train journey information from the text."""
+    # Use the JourneyExtractor class to extract information
+    journey_info = journey_extractor.extract_journey_details(text)
+    if journey_info:
         return {
-            "origin": match.group(1).capitalize(),
-            "destination": match.group(2).capitalize(),
-            "time": match.group(3),
-            "day": match.group(4).capitalize()
+            "origin": journey_info.get("origin"),
+            "destination": journey_info.get("destination"),
+            "time": journey_info.get("departure_time"),  
+            "day": journey_info.get("departure_day")     
         }
     return None
+
+    # Alternative regex-based extraction (commented out)
+   # """Try to extract from/to, time, and day."""
+    #pattern = r"from\s+(\w+)\s+to\s+(\w+).*?at\s+(\d{1,2}:\d{2}).*?on\s+(\w+)"
+    #match = re.search(pattern, text.lower())
+    #if match:
+        #return {
+       #     "origin": match.group(1).capitalize(),
+        #    "destination": match.group(2).capitalize(),
+       #    "time": match.group(3),
+        #    "day": match.group(4).capitalize()
+        #}
+    #return None
 
 
 def generate_response(user_input):
