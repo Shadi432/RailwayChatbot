@@ -13,12 +13,14 @@ load_dotenv()
 
 MINUTE = 60
 DARWIN_PULL_INTERVAL = 5*MINUTE
-RUNTIME_LENGTH_MINUTES = 180
+RUNTIME_LENGTH_MINUTES = 1
 ZIPPED_OUTPUT_NAME = "data.gzip"
 DATA_OUTPUT_NAME = "trainUpdates.dat"
 # Index of the end <PPort> and <Ur> tags that aren't necessary
 SUFFIX_TAG_INDEX = -14
 RID_LENGTH = 15
+
+SCHEDULE_ENTRIES = ("OR", "IP", "PP", "DT")
 
 # Credentials for accessing the FTP server
 FTP_HOSTNAME = os.getenv("FTP_HOSTNAME")
@@ -64,6 +66,70 @@ def ungzipFile(zippedFilename, outputFilename):
     os.remove(zippedFilename)
 
 
+# Get the rid of the schedule
+# Use that rid to get all related records to this schedule
+def GetRecordsFromRid(rid):
+    GET_BY_RID_QUERY = f"SELECT * FROM [JourneyDump].[dbo].[JourneyData] WHERE Rid='{rid}'"
+    recordList = []
+    try:
+        connection = pyodbc.connect("DSN=TrainDB;")
+    except pyodbc.Error as ex:
+        print(ex)
+    
+    cursor = connection.cursor()
+
+    try:
+        cursor.execute(GET_BY_RID_QUERY)
+        recordsRetrieved = cursor.fetchall()
+        # Want to be ready to index all of these fetched values to begin my processing.
+        for record in recordsRetrieved:
+            if record[3] == "TS":
+                recordData = record[4] + record[5] + record[6] + record[7] + record[8]
+                recordList.append(recordData)
+
+    except pyodbc.DatabaseError as err:
+        print(err)
+
+    return recordList
+
+
+def GetDelayedStationData(schedule):
+    ridIndex = schedule.find("rid")
+    # 5 needs to be added since find finds the start of the word rid
+    rid = schedule[ridIndex+5: ridIndex+RID_LENGTH+5]
+    recordList = GetRecordsFromRid(rid)
+
+    # For all the rid related records want to check it if it has a pass or an arr or dep, and that these have an at attribute.
+    # If at attribute is there then get the TS' stop and compare it to the relevant stop on the schedule then create a record and append it to a list
+    # Can return a list of (Location, DestinationStop, expectedTime, actualTime, date) and can loop through this list and submit it to the model. 
+
+def GetStoredSchedulesList():
+    # Want to pull from the database here
+    GET_ALL_SCHEDULES_QUERY = "SELECT * FROM [JourneyDump].[dbo].[JourneyData] WHERE RecordType='schedule'"
+
+    storedSchedulesList = []
+
+    try:
+        connection = pyodbc.connect("DSN=TrainDB;")
+    except pyodbc.Error as ex:
+        print(ex)
+    
+    cursor = connection.cursor()
+
+    try:
+        cursor.execute(GET_ALL_SCHEDULES_QUERY)
+        recordsRetrieved = cursor.fetchall()
+        # Want to be ready to index all of these fetched values to begin my processing.
+        for record in recordsRetrieved:
+            if record[3] == "schedule":
+                scheduleData = record[4] + record[5] + record[6] + record[7] + record[8]
+                storedSchedulesList.append(scheduleData)
+
+    except pyodbc.DatabaseError as err:
+        print(err)
+
+    return storedSchedulesList
+
 # Takes a string and separates it into sections obeying a length limit on each entry.
 # Accepts data(string), numPartitions(int) maxLength(int)
 def partitionString(data, numPartitions, maxLength):
@@ -75,7 +141,6 @@ def partitionString(data, numPartitions, maxLength):
 
     while len(data) > 0:
         sectionNum = len(data)//maxLength
-
         # if this is less than 1 then want to take the entirety of this and put it into the section
         # if more than 1 then can just take up to the 4k and cut it.
         if sectionNum < 1:
@@ -86,6 +151,14 @@ def partitionString(data, numPartitions, maxLength):
             sectionedData[sectionNum] = data[sectionNum*maxLength-1:(sectionNum+1)*maxLength-1]
             data = data[:sectionNum*maxLength-1]
     return sectionedData
+
+# Takes a schedule in string format - Checks if its a passenger service by checking if it has ns2:OR ns2:PP ns2:IP and ns2:DT
+def isSchedulePassengerService(schedule):
+    for SCHEDULE_ENTRY in SCHEDULE_ENTRIES:
+        scheduleEntryCheck = schedule.find(SCHEDULE_ENTRY)
+        if scheduleEntryCheck == -1:
+            return False
+    return True
 
 def sendTrainDataToDB(rid, informationType, data, relatedRid):
     sectionedData = partitionString(data, 5, 4000)
@@ -117,7 +190,7 @@ def processXML():
         for line in file:
             # If a <OW> tag appears then Darwin line breaks which breaks up the XML, so this checks we have a properly formed Darwin line.
             if "<Pport" in line and "</Pport>" in line:
-                targetTags = ["TS", "schedule", "deactivated"] 
+                targetTags = ["TS", "schedule"] 
                 
                 # Match the target tags to the current line of XML and if there snip the data within
                 for tag in targetTags:
@@ -129,18 +202,21 @@ def processXML():
                         ridIndex = data.find("rid")
                         # 5 needs to be added since find finds the start of the word rid
                         rid = data[ridIndex+5: ridIndex+RID_LENGTH+5]
-                        if tag == "schedule":
+                        if tag == "TS":
+                            sendTrainDataToDB(rid, tag, data, relatedRid)
+                        elif tag == "schedule":
                             # In the case of a train taking up the schedule of another the program needs to split the line into both separate schedules
                             schedules = data.split("schedule>", 1)
-                            # There will always be two elements in the schedules list due to how .split works.
                             
-                            if schedules[1] != "":
-                                relatedRidIndex = schedules[1].find("rid")
-                                # 5 needs to be added since find finds the start of the word rid
-                                relatedRid = schedules[1][relatedRidIndex+5: relatedRidIndex+RID_LENGTH+5]
+                            # Because of split I need to replace the match or I'm stuck with an incomplete xml statement.
+                            schedules[0] = schedules[0] + "schedule>"
 
-                        
-                        sendTrainDataToDB(rid, tag, data, relatedRid)
+                            for schedule in schedules: 
+                                if schedule != "" and isSchedulePassengerService(schedule):
+                                    scheduleRidIndex = data.find("rid")
+                                    # 5 needs to be added since find finds the start of the word rid
+                                    scheduleRid = data[scheduleRidIndex+5: scheduleRidIndex+RID_LENGTH+5]
+                                    sendTrainDataToDB(scheduleRid, tag, schedule, "")
                         
 
 def job():
@@ -155,45 +231,46 @@ def job():
     # Cleanup UNCOMMENT FOR FINAL VERSION
     os.remove(DATA_OUTPUT_NAME)
 
-if __name__ == '__main__':
-    # Init for testing so that file remains after program execution for inspection
-    if os.path.isfile(DATA_OUTPUT_NAME):
-        os.remove(DATA_OUTPUT_NAME)
-    # Init
-    try:
-        connection = pyodbc.connect("DSN=TrainDB;")
-        with connection:
-            cursor = connection.cursor()
-            DELETE_ALL_TABLES_QUERY="DROP TABLE JourneyData;DROP TABLE Trains;"
-            CREATE_ALL_TABLES_QUERY="""CREATE TABLE Trains (Rid varchar(15) NOT NULL PRIMARY KEY,);
-                CREATE TABLE JourneyData (
-                    DataId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+# if __name__ == '__main__':
+#     # Init for testing so that file remains after program execution for inspection
+#     if os.path.isfile(DATA_OUTPUT_NAME):
+#         os.remove(DATA_OUTPUT_NAME)
+#     # Init
+#     try:
+#         connection = pyodbc.connect("DSN=TrainDB;")
+#         with connection:
+#             cursor = connection.cursor()
+#             DELETE_ALL_TABLES_QUERY="DROP TABLE JourneyData;DROP TABLE Trains;"
+#             CREATE_ALL_TABLES_QUERY="""CREATE TABLE Trains (Rid varchar(15) NOT NULL PRIMARY KEY,);
+#                 CREATE TABLE JourneyData (
+#                     DataId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
 
-                    Rid varchar(15) NOT NULL REFERENCES Trains(Rid),
-                    RelatedRid varchar(15),
-                    RecordType varchar(20),
-                    DataField1 varchar(4000),
-                    DataField2 varchar(4000),
-                    DataField3 varchar(4000),
-                    DataField4 varchar(4000),
-                    DataField5 varchar(4000));"""
-            cursor.execute(f"{DELETE_ALL_TABLES_QUERY};{CREATE_ALL_TABLES_QUERY};")
-            # Need everything cleared out here, all table data removed.
-    except pyodbc.Error as ex:
-        print(ex)
+#                     Rid varchar(15) NOT NULL REFERENCES Trains(Rid),
+#                     RelatedRid varchar(15),
+#                     RecordType varchar(20),
+#                     DataField1 varchar(4000),
+#                     DataField2 varchar(4000),
+#                     DataField3 varchar(4000),
+#                     DataField4 varchar(4000),
+#                     DataField5 varchar(4000));"""
+#             cursor.execute(f"{DELETE_ALL_TABLES_QUERY};{CREATE_ALL_TABLES_QUERY};")
+#             # Need everything cleared out here, all table data removed.
+#     except pyodbc.Error as ex:
+#         print(ex)
 
     
 
-    endTime = datetime.datetime.now() + datetime.timedelta(minutes=RUNTIME_LENGTH_MINUTES)
+#     endTime = datetime.datetime.now() + datetime.timedelta(minutes=RUNTIME_LENGTH_MINUTES)
 
-    while endTime > datetime.datetime.now():
-        # Pass off the job to another processor 
-        with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(job)
+#     while endTime > datetime.datetime.now():
+#         # Pass off the job to another processor 
+#         with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
+#             future = executor.submit(job)
             
-        print("finished")
-        time.sleep(DARWIN_PULL_INTERVAL)
-        iterationCount += 1
-        print(iterationCount)
-    print("stopped")
-
+#         print("finished")
+#         time.sleep(DARWIN_PULL_INTERVAL)
+#         iterationCount += 1
+#         print(iterationCount)
+#     print("stopped")
+schedulesList = GetStoredSchedulesList()
+GetDelayedStationData(schedulesList[0])
