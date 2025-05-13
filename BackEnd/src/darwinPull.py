@@ -21,6 +21,12 @@ SUFFIX_TAG_INDEX = -14
 RID_LENGTH = 15
 
 SCHEDULE_ENTRIES = ("OR", "IP", "PP", "DT")
+TAGS_LIST = {
+    "<ns5:pass": "wtp",
+    "<ns5:arr": "wta",
+    "<ns5:dep": "wtd",
+}
+TPL_FIELD = 'tpl="'
 
 # Credentials for accessing the FTP server
 FTP_HOSTNAME = os.getenv("FTP_HOSTNAME")
@@ -93,15 +99,101 @@ def GetRecordsFromRid(rid):
     return recordList
 
 
+def GetStartLocationFromSchedule(schedule):
+    originalStationTagIndex = schedule.find("ns2:OR")
+    originalStationTagStart = schedule[originalStationTagIndex:]
+    tplFieldStartIndex = originalStationTagStart.find('tpl="')+len(TPL_FIELD)    
+    tplFieldValue = originalStationTagStart[tplFieldStartIndex:]
+    tplFieldEndQuote = tplFieldValue.find('"')
+    return tplFieldValue[:tplFieldEndQuote]
+
+# If they're matched then look for the first /> after them and take that data and look for an at= variable and take the entire "" from that
+# Also take the tpl location too - first occurrence of tpl
+
+def GetExpectedTimeFromSchedule(schedule, destination, tag):
+    tplFieldInDestinationIndex = schedule.find(destination)
+    splitDestinationField = schedule[:tplFieldInDestinationIndex]
+    # print(splitDestinationField)
+    expectedTimeFieldIndex = splitDestinationField.rfind(TAGS_LIST[tag])
+    expectedTimeFieldStart = splitDestinationField[expectedTimeFieldIndex:]
+    expectedTimeValueIndex = expectedTimeFieldStart.find('"')+1
+    expectedTimeValue = expectedTimeFieldStart[expectedTimeValueIndex:]
+    expectedTimeEndQuote = expectedTimeValue.find('"')
+
+    return expectedTimeValue[:expectedTimeEndQuote]
+
+
+# Returns a list of lists of this format (StartLocation, DestinationStop, expectedTime, actualTime, date) and can loop through this list and submit it to the model. 
 def GetDelayedStationData(schedule):
     ridIndex = schedule.find("rid")
     # 5 needs to be added since find finds the start of the word rid
     rid = schedule[ridIndex+5: ridIndex+RID_LENGTH+5]
     recordList = GetRecordsFromRid(rid)
 
-    # For all the rid related records want to check it if it has a pass or an arr or dep, and that these have an at attribute.
-    # If at attribute is there then get the TS' stop and compare it to the relevant stop on the schedule then create a record and append it to a list
-    # Can return a list of (Location, DestinationStop, expectedTime, actualTime, date) and can loop through this list and submit it to the model. 
+    returnList = []
+    
+    AT_FIELD = 'at="'
+    SSD_FIELD = 'ssd="'
+
+    # For each record I need to look for every occurrence of an at THEN 
+    # For the given tag that's found then get destination etc.
+    for record in recordList:
+        atOccurrences = record.split(AT_FIELD)
+
+        for num in range(len(atOccurrences)):
+            # If at field exists
+            if num != 0:
+                resultsDictionary = {
+                    "StartLocation": "",
+                    "Destination": "",
+                    "ExpectedTime": "",
+                    "ActualTime": "",
+                    "Date": "",
+                }
+                        
+                actualTimeEndQuote = atOccurrences[num].find('"')
+                actualTimeValue = atOccurrences[num][:actualTimeEndQuote]
+                resultsDictionary["ActualTime"] = actualTimeValue
+                # Need a -1 to go and find the previous characters to get the tag.
+                previousChunk = atOccurrences[num-1]
+
+                # Find target tag
+                targetTagIndex = previousChunk.rfind("<ns5:")
+                tag = previousChunk[targetTagIndex:].strip()
+
+                # Destination - tpl field
+                destinationFieldFound = previousChunk.rfind(TPL_FIELD)
+                if destinationFieldFound == -1:
+                    '''
+                    If a departure tag at is found, it'll have an arrival tag above it
+                    if that arrival tag also has an at (almost 100%) then there's an extra chunk inbetween the location chunk.
+                    '''
+                    previousChunk = atOccurrences[num-2]
+                    destinationFieldFound = previousChunk.rfind(TPL_FIELD)
+
+                destinationValueStart = previousChunk[destinationFieldFound+len(TPL_FIELD):]
+                destinationEndQuoteIndex = destinationValueStart.find('"')
+                destinationValue = destinationValueStart[:destinationEndQuoteIndex]
+                
+                resultsDictionary["Destination"] = destinationValue
+
+                
+
+                # Date
+                dateFieldFound = record.find(SSD_FIELD)
+                if dateFieldFound != -1:
+                    dateFieldSlice = record[dateFieldFound+len(SSD_FIELD):]
+                    dateFieldEndQuote = dateFieldSlice.find('"')
+                    resultsDictionary["Date"] = dateFieldSlice[:dateFieldEndQuote] 
+                
+                resultsDictionary["StartLocation"] = GetStartLocationFromSchedule(schedule)
+                resultsDictionary["ExpectedTime"] = GetExpectedTimeFromSchedule(schedule, resultsDictionary["Destination"], tag)
+                
+                returnList.append((resultsDictionary["StartLocation"], resultsDictionary["Destination"], resultsDictionary["ExpectedTime"], resultsDictionary["ActualTime"], resultsDictionary["Date"]))
+
+
+
+    return returnList
 
 def GetStoredSchedulesList():
     # Want to pull from the database here
@@ -273,4 +365,6 @@ def job():
 #         print(iterationCount)
 #     print("stopped")
 schedulesList = GetStoredSchedulesList()
-GetDelayedStationData(schedulesList[0])
+
+for schedule in schedulesList:
+    print(GetDelayedStationData(schedule))
