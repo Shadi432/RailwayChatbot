@@ -27,6 +27,8 @@ TAGS_LIST = {
     "<ns5:dep": "wtd",
 }
 TPL_FIELD = 'tpl="'
+AT_FIELD = 'at="'
+SSD_FIELD = 'ssd="'
 
 # Credentials for accessing the FTP server
 FTP_HOSTNAME = os.getenv("FTP_HOSTNAME")
@@ -107,13 +109,9 @@ def GetStartLocationFromSchedule(schedule):
     tplFieldEndQuote = tplFieldValue.find('"')
     return tplFieldValue[:tplFieldEndQuote]
 
-# If they're matched then look for the first /> after them and take that data and look for an at= variable and take the entire "" from that
-# Also take the tpl location too - first occurrence of tpl
-
 def GetExpectedTimeFromSchedule(schedule, destination, tag):
     tplFieldInDestinationIndex = schedule.find(destination)
     splitDestinationField = schedule[:tplFieldInDestinationIndex]
-    # print(splitDestinationField)
     expectedTimeFieldIndex = splitDestinationField.rfind(TAGS_LIST[tag])
     expectedTimeFieldStart = splitDestinationField[expectedTimeFieldIndex:]
     expectedTimeValueIndex = expectedTimeFieldStart.find('"')+1
@@ -131,9 +129,6 @@ def GetDelayedStationData(schedule):
     recordList = GetRecordsFromRid(rid)
 
     returnList = []
-    
-    AT_FIELD = 'at="'
-    SSD_FIELD = 'ssd="'
 
     # For each record I need to look for every occurrence of an at THEN 
     # For the given tag that's found then get destination etc.
@@ -196,7 +191,6 @@ def GetDelayedStationData(schedule):
     return returnList
 
 def GetStoredSchedulesList():
-    # Want to pull from the database here
     GET_ALL_SCHEDULES_QUERY = "SELECT * FROM [JourneyDump].[dbo].[JourneyData] WHERE RecordType='schedule'"
 
     storedSchedulesList = []
@@ -323,48 +317,53 @@ def job():
     # Cleanup UNCOMMENT FOR FINAL VERSION
     os.remove(DATA_OUTPUT_NAME)
 
-# if __name__ == '__main__':
-#     # Init for testing so that file remains after program execution for inspection
-#     if os.path.isfile(DATA_OUTPUT_NAME):
-#         os.remove(DATA_OUTPUT_NAME)
-#     # Init
-#     try:
-#         connection = pyodbc.connect("DSN=TrainDB;")
-#         with connection:
-#             cursor = connection.cursor()
-#             DELETE_ALL_TABLES_QUERY="DROP TABLE JourneyData;DROP TABLE Trains;"
-#             CREATE_ALL_TABLES_QUERY="""CREATE TABLE Trains (Rid varchar(15) NOT NULL PRIMARY KEY,);
-#                 CREATE TABLE JourneyData (
-#                     DataId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+if __name__ == '__main__':
+    # Init for testing so that file remains after program execution for inspection
+    if os.path.isfile(DATA_OUTPUT_NAME):
+        os.remove(DATA_OUTPUT_NAME)
+    # Init
+    try:
+        connection = pyodbc.connect("DSN=TrainDB;")
+        with connection:
+            cursor = connection.cursor()
+            DELETE_ALL_TABLES_QUERY="DROP TABLE JourneyData;DROP TABLE Trains;"
+            CREATE_ALL_TABLES_QUERY="""CREATE TABLE Trains (Rid varchar(15) NOT NULL PRIMARY KEY,);
+                CREATE TABLE JourneyData (
+                    DataId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
 
-#                     Rid varchar(15) NOT NULL REFERENCES Trains(Rid),
-#                     RelatedRid varchar(15),
-#                     RecordType varchar(20),
-#                     DataField1 varchar(4000),
-#                     DataField2 varchar(4000),
-#                     DataField3 varchar(4000),
-#                     DataField4 varchar(4000),
-#                     DataField5 varchar(4000));"""
-#             cursor.execute(f"{DELETE_ALL_TABLES_QUERY};{CREATE_ALL_TABLES_QUERY};")
-#             # Need everything cleared out here, all table data removed.
-#     except pyodbc.Error as ex:
-#         print(ex)
+                    Rid varchar(15) NOT NULL REFERENCES Trains(Rid),
+                    RelatedRid varchar(15),
+                    RecordType varchar(20),
+                    DataField1 varchar(4000),
+                    DataField2 varchar(4000),
+                    DataField3 varchar(4000),
+                    DataField4 varchar(4000),
+                    DataField5 varchar(4000));"""
+            cursor.execute(f"{DELETE_ALL_TABLES_QUERY};{CREATE_ALL_TABLES_QUERY};")
+            # Need everything cleared out here, all table data removed.
+    except pyodbc.Error as ex:
+        print(ex)
 
     
 
-#     endTime = datetime.datetime.now() + datetime.timedelta(minutes=RUNTIME_LENGTH_MINUTES)
+    endTime = datetime.datetime.now() + datetime.timedelta(minutes=RUNTIME_LENGTH_MINUTES)
 
-#     while endTime > datetime.datetime.now():
-#         # Pass off the job to another processor 
-#         with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
-#             future = executor.submit(job)
+    while endTime > datetime.datetime.now():
+        # Pass off the job to another processor 
+        with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(job)
             
-#         print("finished")
-#         time.sleep(DARWIN_PULL_INTERVAL)
-#         iterationCount += 1
-#         print(iterationCount)
-#     print("stopped")
-schedulesList = GetStoredSchedulesList()
+        print("Pull completed beginning wait for next Darwin update...")
+        time.sleep(DARWIN_PULL_INTERVAL)
+        iterationCount += 1
+        print(f"Iteration Count: {iterationCount}")
+    print("Pull from Darwin phase completed... Beginning processing the stored data")
 
-for schedule in schedulesList:
-    print(GetDelayedStationData(schedule))
+    schedulesList = GetStoredSchedulesList()
+
+    for schedule in schedulesList:
+        delayedStationData = GetDelayedStationData(schedule)
+        if delayedStationData != []:
+            print(delayedStationData)
+
+    print("Processing the stored data completed")
