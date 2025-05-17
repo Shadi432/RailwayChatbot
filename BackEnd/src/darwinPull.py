@@ -359,11 +359,14 @@ if __name__ == '__main__':
         print(f"Iteration Count: {iterationCount}")
     print("Pull from Darwin phase completed... Beginning processing the stored data")
 
-    schedulesList = GetStoredSchedulesList()
+schedulesList = GetStoredSchedulesList()
 
+with open("dataFile.txt", "a") as file:
     for schedule in schedulesList:
         delayedStationData = GetDelayedStationData(schedule)
         if delayedStationData != []:
-            print(delayedStationData)
+            for stopData in delayedStationData:
+                file.write(f"({",".join(stopData)}),")
+            file.write("\n")
 
-    print("Processing the stored data completed")
+print("Processing the stored data completed. Stored in dataFile.txt")
