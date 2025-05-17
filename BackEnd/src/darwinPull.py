@@ -317,53 +317,55 @@ def job():
     # Cleanup UNCOMMENT FOR FINAL VERSION
     os.remove(DATA_OUTPUT_NAME)
 
-if __name__ == '__main__':
-    # Init for testing so that file remains after program execution for inspection
-    if os.path.isfile(DATA_OUTPUT_NAME):
-        os.remove(DATA_OUTPUT_NAME)
-    # Init
-    try:
-        connection = pyodbc.connect("DSN=TrainDB;")
-        with connection:
-            cursor = connection.cursor()
-            DELETE_ALL_TABLES_QUERY="DROP TABLE JourneyData;DROP TABLE Trains;"
-            CREATE_ALL_TABLES_QUERY="""CREATE TABLE Trains (Rid varchar(15) NOT NULL PRIMARY KEY,);
-                CREATE TABLE JourneyData (
-                    DataId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+# if __name__ == '__main__':
+#     # Init for testing so that file remains after program execution for inspection
+#     if os.path.isfile(DATA_OUTPUT_NAME):
+#         os.remove(DATA_OUTPUT_NAME)
+#     # Init
+#     try:
+#         connection = pyodbc.connect("DSN=TrainDB;")
+#         with connection:
+#             cursor = connection.cursor()
+#             DELETE_ALL_TABLES_QUERY="DROP TABLE JourneyData;DROP TABLE Trains;"
+#             CREATE_ALL_TABLES_QUERY="""CREATE TABLE Trains (Rid varchar(15) NOT NULL PRIMARY KEY,);
+#                 CREATE TABLE JourneyData (
+#                     DataId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
 
-                    Rid varchar(15) NOT NULL REFERENCES Trains(Rid),
-                    RelatedRid varchar(15),
-                    RecordType varchar(20),
-                    DataField1 varchar(4000),
-                    DataField2 varchar(4000),
-                    DataField3 varchar(4000),
-                    DataField4 varchar(4000),
-                    DataField5 varchar(4000));"""
-            cursor.execute(f"{DELETE_ALL_TABLES_QUERY};{CREATE_ALL_TABLES_QUERY};")
-            # Need everything cleared out here, all table data removed.
-    except pyodbc.Error as ex:
-        print(ex)
+#                     Rid varchar(15) NOT NULL REFERENCES Trains(Rid),
+#                     RelatedRid varchar(15),
+#                     RecordType varchar(20),
+#                     DataField1 varchar(4000),
+#                     DataField2 varchar(4000),
+#                     DataField3 varchar(4000),
+#                     DataField4 varchar(4000),
+#                     DataField5 varchar(4000));"""
+#             cursor.execute(f"{DELETE_ALL_TABLES_QUERY};{CREATE_ALL_TABLES_QUERY};")
+#             # Need everything cleared out here, all table data removed.
+#     except pyodbc.Error as ex:
+#         print(ex)
 
     
 
-    endTime = datetime.datetime.now() + datetime.timedelta(minutes=RUNTIME_LENGTH_MINUTES)
+#     endTime = datetime.datetime.now() + datetime.timedelta(minutes=RUNTIME_LENGTH_MINUTES)
 
-    while endTime > datetime.datetime.now():
-        # Pass off the job to another processor 
-        with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(job)
+#     while endTime > datetime.datetime.now():
+#         # Pass off the job to another processor 
+#         with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
+#             future = executor.submit(job)
             
-        print("Pull completed beginning wait for next Darwin update...")
-        time.sleep(DARWIN_PULL_INTERVAL)
-        iterationCount += 1
-        print(f"Iteration Count: {iterationCount}")
-    print("Pull from Darwin phase completed... Beginning processing the stored data")
+#         print("Pull completed beginning wait for next Darwin update...")
+#         time.sleep(DARWIN_PULL_INTERVAL)
+#         iterationCount += 1
+#         print(f"Iteration Count: {iterationCount}")
+#     print("Pull from Darwin phase completed... Beginning processing the stored data")
 
-    schedulesList = GetStoredSchedulesList()
+schedulesList = GetStoredSchedulesList()
 
+with open("dataFile.txt", "a") as file:
     for schedule in schedulesList:
         delayedStationData = GetDelayedStationData(schedule)
         if delayedStationData != []:
-            print(delayedStationData)
+            for stopData in delayedStationData:
+                file.write(f"{",".join(stopData)}\n")
 
-    print("Processing the stored data completed")
+print("Processing the stored data completed. Stored in dataFile.txt")
