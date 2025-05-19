@@ -37,9 +37,20 @@ async function getFareInfo(originStation: string, destinationStation: string) {
 
     for (let i=0; i<FareRowsData.length; i++){
       let textValue = await FareRowsData[i].getText();
+      console.log(`${textValue} + SEPARATOR\n`);
+
+      // Check if they have a £ in their text, if they do then I can take the ticket name as well as Adult and Child ticket prices.
+      // I should use a dictionary and check if a key already exists in the object before inputting into it
+      // Can use anchor for finding the name of the ticket, if I find the anchor and find its children strong then I'll get the ticket name. or maybe even just its text.
+      // I can use method below for getting the Adult and Child tickets. Once I have the TR
+
+      // Could just match these text against the four text types I'm looking for then pull out the parents.
+      // if (textValue.includes(TARGET_TICKETS))
 
       if (textValue.includes("RETURN FARES") || textValue.includes("SINGLE FARES")) {
+        // Could get the parents of these elements then loop through.
         // This is based of the knowledge that the HTML is parsed from top down.
+        
         if (i != FareRowsData.length-1){
           // The +5 is just a quirk with how I need to get the next row since there are intermediate trs for showing ticket instructions/info.
           for (let j=1; j<6; j+=4){
