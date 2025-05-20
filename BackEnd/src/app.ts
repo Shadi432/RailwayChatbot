@@ -5,11 +5,10 @@ const app = express();
 const port = 3000;
 
 const LINK_BR_FARES = "https://www.brfares.com/";
-const TARGET_TICKETS = ["ANYTIME DAY R", "OFF-PEAK R", "ANYTIME DAY S", "OFF-PEAK S"]
 
 const WALK_UP_STANDARD_ID = "tclass-0-1-div"
 
-// Returns a JS object: { "TicketType": {"Adult": "Price", "Child": "Price"}}
+// Returns a JS object: { "TicketName": {"TicketType: "Return/Single", "Adult": "Price", "Child": "Price"}}
 async function getFareInfo(originStation: string, destinationStation: string) {
   let driver: Builder = await new Builder().forBrowser(Browser.CHROME).build();
   const journeyData = {}
@@ -37,38 +36,26 @@ async function getFareInfo(originStation: string, destinationStation: string) {
 
     for (let i=0; i<FareRowsData.length; i++){
       let textValue = await FareRowsData[i].getText();
-      console.log(`${textValue} + SEPARATOR\n`);
+      if (textValue.includes("£")) {
+        // ANYTIME RETURN, OFF-PEAK R etc
+        const ticketName = await FareRowsData[i].findElement(By.tagName("a")).findElement(By.tagName("strong")).getText();
 
-      // Check if they have a £ in their text, if they do then I can take the ticket name as well as Adult and Child ticket prices.
-      // I should use a dictionary and check if a key already exists in the object before inputting into it
-      // Can use anchor for finding the name of the ticket, if I find the anchor and find its children strong then I'll get the ticket name. or maybe even just its text.
-      // I can use method below for getting the Adult and Child tickets. Once I have the TR
+        if (!journeyData[ticketName]){
+          const ticketType = getTicketType(ticketName);
+          if (!ticketType){
+            continue;
+          }
 
-      // Could just match these text against the four text types I'm looking for then pull out the parents.
-      // if (textValue.includes(TARGET_TICKETS))
+          journeyData[ticketName] = {TicketType: ticketType, Adult: "505.50"}
+          
+          const ticketFor = await FareRowsData[i].findElements(By.className("tiny"));
 
-      if (textValue.includes("RETURN FARES") || textValue.includes("SINGLE FARES")) {
-        // Could get the parents of these elements then loop through.
-        // This is based of the knowledge that the HTML is parsed from top down.
-        
-        if (i != FareRowsData.length-1){
-          // The +5 is just a quirk with how I need to get the next row since there are intermediate trs for showing ticket instructions/info.
-          for (let j=1; j<6; j+=4){
-            // ADULT/CHILD
-            const ticketFor = await FareRowsData[i+j].findElements(By.className("tiny"));
-            // ANYTIME RETURN, OFF-PEAK R etc
-            const ticketTypeData: string = await FareRowsData[i+j].findElement(By.tagName("td")).getText()
-            const ticketType: string = ticketTypeData.split("\n")[0];
-            // Ticket type this is used to index the array and then have a dictionary with "Adult and Child" for each ticket type
-            
-            journeyData[ticketType] = {};
-            for (let adultChild of ticketFor){
-              // Gets the parent of an element
-              let priceForAgeGroup = await adultChild.findElement(By.xpath("./.."));
-              const ticketPricingData: string = await priceForAgeGroup.getText();
-              const ticketPricing: string[] = ticketPricingData.split("\n")
-              journeyData[ticketType][ticketPricing[0]] = ticketPricing[1];
-            }
+          for (let adultChild of ticketFor){
+            // Gets the parent of an element
+            let priceForAgeGroup = await adultChild.findElement(By.xpath("./.."));
+            const ticketPricingData: string = await priceForAgeGroup.getText();
+            const ticketPricing: string[] = ticketPricingData.split("\n")
+            journeyData[ticketName][ticketPricing[0]] = ticketPricing[1];
           }
         }
       }
@@ -77,18 +64,26 @@ async function getFareInfo(originStation: string, destinationStation: string) {
     console.log(err);
   }
 
-  console.log(`Finished: `);
-  console.log(journeyData);
-
   await driver.quit();
 
   return journeyData;
 }
 
-app.get('/', (req, res) => {
-  const ticketInfo = getFareInfo("NRW", "LST");
-  res.send('Hello World!');
+app.get('/', async (req, res) => {
+  const ticketInfo = await getFareInfo(req.query.originStation.toString(), req.query.destinationStation.toString());
+  res.send(ticketInfo);
 });
+
+const getTicketType = (ticketName: string)=>{
+  const ticketType: string[] = ticketName.split(" ");
+  if (ticketType[1].toLowerCase().match("r") ){
+    return "Return"
+  } else if (ticketType[1].toLowerCase().match("s")){
+    return "Single"
+  } else {
+    return null
+  }
+}
 
 app.listen(port, () => {
   return console.log(`Express is listening at http://localhost:${port}`);
