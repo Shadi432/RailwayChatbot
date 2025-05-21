@@ -4,6 +4,7 @@ import re
 import uuid
 import time
 import warnings
+import requests
 from train_chatbot import predict_delay_from_input
 from extra_features import get_train_crowd_info, get_random_weather
 from nlpprocessor import JourneyExtractor  # Import JourneyExtractor for NLP
@@ -313,6 +314,43 @@ def generate_response(user_input, session_id=None):
     intent_tag = match_intent(user_input)
     direct_answer_handled = handle_direct_answer(user_input, conversation)
 
+    # --- Handle FOLLOW_UP state ---
+    if conversation["state"] == CONVERSATION_STATES["FOLLOW_UP"]:
+        if user_input.strip().lower() in ["no", "no thanks", "nothing", "that's all", "exit", "bye", "goodbye"]:
+            # Reset state and info
+            conversation["state"] = CONVERSATION_STATES["GREETING"]
+            conversation["current_task"] = None
+            conversation["journey_info"] = {}
+            # Choose a greeting
+            greeting = random.choice([
+                "Hello! I'm RailBot, your railway assistant. How can I help you today?",
+                "Hi there! Need information about train journeys or delays?",
+                "Welcome! I can help you with train information and delay predictions. What would you like to know?"
+            ])
+            save_bot_response(session_id, greeting)
+            return greeting, session_id
+        # If user says yes or asks a new question, reset and continue
+        elif user_input.strip().lower() in ["yes", "sure", "okay", "yep"]:
+            response = "Great! What would you like to do next? You can ask for ticket prices or delay predictions."
+            conversation["state"] = CONVERSATION_STATES["GREETING"]
+            conversation["current_task"] = None
+            conversation["journey_info"] = {}
+            save_bot_response(session_id, response)
+            return response, session_id
+        # If user asks for delay prediction after ticket, use last journey_info
+        elif "delay" in user_input.lower():
+            # Use previous journey_info for delay prediction
+            delay = predict_delay_from_input("", weather=None, journey_info=conversation["journey_info"])
+            response = f"Here's the delay prediction for your journey:\n\n{delay}\n\nAnything else I can help with?"
+            save_bot_response(session_id, response)
+            return response, session_id
+        # Otherwise, treat as a new query (reset state and continue)
+        else:
+            conversation["state"] = CONVERSATION_STATES["GREETING"]
+            conversation["current_task"] = None
+            # Do not clear journey_info so user can use previous info for delay
+            # Continue to intent matching as normal
+
     # Check for conversation-ending intents first
     if intent_tag == "goodbye":
         conversation["state"] = CONVERSATION_STATES["GOODBYE"]
@@ -345,16 +383,7 @@ def generate_response(user_input, session_id=None):
     # --- Ticket price intent ---
     if (
         intent_tag == "ticket_price"
-        or conversation["state"] in [
-            CONVERSATION_STATES["COLLECTING_TICKET_TYPE"],
-            CONVERSATION_STATES["COLLECTING_TICKET_TIME"],
-            CONVERSATION_STATES["COLLECTING_TICKET_AGE"],
-            CONVERSATION_STATES["COLLECTING_ORIGIN"],
-            CONVERSATION_STATES["COLLECTING_DESTINATION"],
-            CONVERSATION_STATES["COLLECTING_TIME"],
-            CONVERSATION_STATES["COLLECTING_DAY"],
-        ]
-        and conversation.get("current_task") == "ticket_price"
+        or conversation.get("current_task") == "ticket_price"
     ):
         conversation["current_task"] = "ticket_price"
         if not direct_answer_handled:
@@ -365,7 +394,24 @@ def generate_response(user_input, session_id=None):
         conversation["missing_fields"] = missing_fields
         if not missing_fields:
             conversation["state"] = CONVERSATION_STATES["PROVIDING_TICKET_INFO"]
-            ticket_info = format_ticket_price(conversation["journey_info"])
+            # Fetch real fares
+            origin = conversation["journey_info"]["origin"]
+            destination = conversation["journey_info"]["destination"]
+            fares_json = fetch_real_fare(origin, destination)
+            if fares_json:
+                ticket_name, price = select_ticket_price(fares_json, conversation["journey_info"])
+                if ticket_name and price:
+                    ticket_info = (
+                        f"For a {conversation['journey_info'].get('ticket_age','ADULT').lower()} "
+                        f"{conversation['journey_info'].get('ticket_time','ANYTIME').lower()} "
+                        f"{conversation['journey_info'].get('ticket_type','SINGLE').lower()} ticket "
+                        f"({ticket_name}) from {origin} to {destination}, the price is {price}."
+                    )
+                else:
+                    ticket_info = "Sorry, I couldn't find a matching ticket for your request."
+            else:
+                ticket_info = "Sorry, I couldn't fetch fare information at this time."
+
             random_followup = random.choice([
                 "Would you like to check for delays on this route?",
                 "Is there anything else you'd like to know about this journey?",
@@ -398,15 +444,7 @@ def generate_response(user_input, session_id=None):
     # --- Delay prediction intent ---
     if (
         intent_tag == "delay_prediction"
-        or (
-            conversation["state"] in [
-                CONVERSATION_STATES["COLLECTING_ORIGIN"],
-                CONVERSATION_STATES["COLLECTING_DESTINATION"],
-                CONVERSATION_STATES["COLLECTING_TIME"],
-                CONVERSATION_STATES["COLLECTING_DAY"],
-            ]
-            and conversation.get("current_task") != "ticket_price"
-        )
+        or conversation.get("current_task") == "delay_prediction"
     ):
         conversation["current_task"] = "delay_prediction"
         if not direct_answer_handled:
@@ -461,6 +499,53 @@ def generate_response(user_input, session_id=None):
                 "• Will my train from Manchester to Liverpool be delayed tomorrow morning?")
     save_bot_response(session_id, response)
     return response, session_id
+
+def fetch_real_fare(origin, destination):
+    url = f"http://localhost:3000/?originStation={origin}&destinationStation={destination}"
+    try:
+        resp = requests.get(url, timeout=15)
+        if resp.status_code == 200:
+            return resp.json()
+        else:
+            return None
+    except Exception as e:
+        return None
+
+def select_ticket_price(fares_json, journey_info):
+    # Map user fields to ticket name patterns
+    ticket_type = journey_info.get("ticket_type", "").upper()  # SINGLE/RETURN
+    ticket_time = journey_info.get("ticket_time", "").upper()  # OFF-PEAK/ANYTIME
+    ticket_age = journey_info.get("ticket_age", "ADULT").capitalize()  # Adult/Child
+
+    # Build possible ticket name keys
+    candidates = []
+    if ticket_type == "SINGLE":
+        if ticket_time == "OFF-PEAK":
+            candidates.append("OFF-PEAK S")
+        if ticket_time == "ANYTIME":
+            candidates.append("ANYTIME S")
+    elif ticket_type == "RETURN":
+        if ticket_time == "OFF-PEAK":
+            candidates.append("OFF-PEAK R")
+        if ticket_time == "ANYTIME":
+            candidates.append("ANYTIME R")
+    # Add fallback candidates
+    candidates += ["FLEXI SEASON", "TRAVELCARD 7DS", "CHILD FLTFARE R", "CARNET SINGLE"]
+
+    # Try to find the best match
+    for name in candidates:
+        for key in fares_json:
+            if name in key.upper():
+                ticket = fares_json[key]
+                price = ticket.get(ticket_age)
+                if price:
+                    return key, price
+    # If nothing found, try to return any ticket
+    for key, ticket in fares_json.items():
+        price = ticket.get(ticket_age)
+        if price:
+            return key, price
+    return None, None
 
 # Run chatbot with improved conversation flow
 if __name__ == "__main__":
