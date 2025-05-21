@@ -4,7 +4,7 @@ def is_rush_hour(hour):
     return 7 <= hour <= 10 or 16 <= hour <= 19
 
 def is_public_holiday(day_str):
-    return False  # Optional: replace with actual lookup
+    return False
 
 def get_random_weather():
     return random.choice([

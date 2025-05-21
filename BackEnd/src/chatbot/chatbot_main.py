@@ -1,10 +1,12 @@
 # imports:
 import random
 import re
+
 import uuid
 import time
 import warnings
 import requests
+
 from train_chatbot import predict_delay_from_input
 from extra_features import get_train_crowd_info, get_random_weather
 from nlpprocessor import JourneyExtractor  # Import JourneyExtractor for NLP
@@ -20,9 +22,23 @@ journey_extractor = JourneyExtractor(debug=False)
 conversation_history = {}
 active_conversations = {}
 
+# regex to extract origin, destination, time, and date (either dd/mm/yyyy or day-name)
+DELAY_REGEX = re.compile(
+    r"(?:delay\s+from|predict\s+delay\s+from|delay)\s+(.+?)\s+to\s+(.+?)"
+    r"(?:\s+at\s+(\d{1,2}:\d{2}))?"
+    r"(?:\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4}|\w+))?",
+    re.IGNORECASE
+)
+TICKET_REGEX = re.compile(
+    r"(?:cheapest\s+ticket|ticket)\s+from\s+(.+?)\s+to\s+(.+?)"
+    r"(?:\s+on\s+(\d{1,2}/\d{1,2}/\d{2,4}|\w+))?",
+    re.IGNORECASE
+)
+
 # predefined intents:
 intents = {
     "intents": [
+
         {
             "tag": "greeting",
             "patterns": ["hello", "hi", "hey", "good morning", "good afternoon", "good evening"],
@@ -141,13 +157,15 @@ def save_bot_response(session_id, response):
         conversation["history"].append({"role": "bot", "message": response})
         conversation["last_message"] = response
 
+
 # function to match user input to intent:
 def match_intent(user_input):
-    user_input = user_input.lower()
+    u = user_input.lower()
     for intent in intents["intents"]:
-        for pattern in intent["patterns"]:
-            if pattern in user_input:
+        for pat in intent["patterns"]:
+            if pat in u:
                 return intent["tag"]
+
 
     # Enhanced detection for booking
     if any(word in user_input for word in ["book", "buy", "purchase", "reserve", "get ticket"]):
@@ -159,9 +177,11 @@ def match_intent(user_input):
     
     # Enhanced detection for delay queries
     if any(word in user_input for word in ["delay", "train", "late", "on time", "journey", "travel", "from", "to"]):
-        return "delay_prediction"
 
+
+        return "delay_prediction"
     return "unknown"
+
 
 # function to extract train journey details using NLP:
 def extract_train_info(text, existing_info=None):
@@ -380,6 +400,10 @@ def generate_response(user_input, session_id=None):
     if not session_id:
         session_id = create_conversation_session()
     conversation = update_conversation(session_id, user_input)
+
+# main response generator:
+def generate_response(user_input):
+
     intent_tag = match_intent(user_input)
     direct_answer_handled = handle_direct_answer(user_input, conversation)
 
@@ -736,5 +760,5 @@ if __name__ == "__main__":
             print(f"Bot: {conversation['last_message']}")
         else:
             print(f"Bot: {response}")
-
+=
 
