@@ -504,20 +504,22 @@ def fetch_real_fare(origin, destination):
     url = f"http://localhost:3000/?originStation={origin}&destinationStation={destination}"
     try:
         resp = requests.get(url, timeout=15)
+        print(f"Fetching fares from: {url}")
+        print(f"Status code: {resp.status_code}")
+        print(f"Response text: {resp.text}")
         if resp.status_code == 200:
             return resp.json()
         else:
             return None
     except Exception as e:
+        print(f"Error fetching fares: {e}")
         return None
 
 def select_ticket_price(fares_json, journey_info):
-    # Map user fields to ticket name patterns
     ticket_type = journey_info.get("ticket_type", "").upper()  # SINGLE/RETURN
     ticket_time = journey_info.get("ticket_time", "").upper()  # OFF-PEAK/ANYTIME
     ticket_age = journey_info.get("ticket_age", "ADULT").capitalize()  # Adult/Child
 
-    # Build possible ticket name keys
     candidates = []
     if ticket_type == "SINGLE":
         if ticket_time == "OFF-PEAK":
@@ -529,10 +531,8 @@ def select_ticket_price(fares_json, journey_info):
             candidates.append("OFF-PEAK R")
         if ticket_time == "ANYTIME":
             candidates.append("ANYTIME R")
-    # Add fallback candidates
     candidates += ["FLEXI SEASON", "TRAVELCARD 7DS", "CHILD FLTFARE R", "CARNET SINGLE"]
 
-    # Try to find the best match
     for name in candidates:
         for key in fares_json:
             if name in key.upper():
@@ -540,7 +540,6 @@ def select_ticket_price(fares_json, journey_info):
                 price = ticket.get(ticket_age)
                 if price:
                     return key, price
-    # If nothing found, try to return any ticket
     for key, ticket in fares_json.items():
         price = ticket.get(ticket_age)
         if price:
