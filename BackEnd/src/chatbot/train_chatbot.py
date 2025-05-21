@@ -68,12 +68,13 @@ def extract_features_from_input(user_input):
     return np.array([[station_deviation, day_of_week, hour, peak]])
 
 # main prediction function:
-def predict_delay_from_input(user_input, weather=None):
+def predict_delay_from_input(user_input, weather=None, journey_info=None):
     """Predict train delay based on user input with improved NLP extraction."""
     from nlpprocessor import JourneyExtractor
-    
+
     extractor = JourneyExtractor(debug=False)  # Ensure debug is False
-    journey_info = extractor.extract_journey_details(user_input)
+    if journey_info is None:
+        journey_info = extractor.extract_journey_details(user_input)
     
     if not journey_info or "origin" not in journey_info or "destination" not in journey_info:
         return ("Sorry, I couldn't extract your train journey details.\n"

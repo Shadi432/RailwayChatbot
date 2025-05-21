@@ -5,19 +5,30 @@ function App() {
   const [userInput, setUserInput] = useState('');
   const [botResponse, setBotResponse] = useState('');
   const [loading, setLoading] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null); // <-- Add this
 
   // handle the submit button click
   const handleSubmit = async () => {
     const trimmedInput = userInput.trim();
     setLoading(true);
 
-    await axios.post('http://localhost:5000/chatbot', {message: trimmedInput}, {
-      headers: {
-        "Content-Type": "application/json"
+    await axios.post('http://localhost:5000/chatbot', 
+      { message: trimmedInput, session_id: sessionId }, // <-- Send session_id
+      {
+        headers: {
+          "Content-Type": "application/json"
+        }
       }
+    )
+    .then((response) => {
+      setBotResponse(response.data["response"]);
+      setSessionId(response.data["session_id"]); // <-- Store session_id for next turn
+      setUserInput(""); // <-- This will clear the input bar after sending
     })
-    .then((response) => {console.log(response.data["response"]); setBotResponse(response.data["response"])})
-    .catch((err) => {console.log(err); setBotResponse('Error communicating with server.');})
+    .catch((err) => {
+      console.log(err);
+      setBotResponse('Error communicating with server.');
+    })
     .finally(() => setLoading(false));
   };
 
