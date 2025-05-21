@@ -133,12 +133,26 @@ def chatbot():
         return "Chatbot endpoint is live. Please send a POST request with a message."
 
     data = request.get_json()
-    user_input = data.get("message", "").strip()
+
+    user_input = data.get("message", "")
+    session_id = data.get("session_id")  # Support session_id
+
+
+  
+
     if not user_input:
         return jsonify({"response": "No input provided."}), 400
 
-    response = generate_response(user_input)
-    return jsonify({"response": response})
+    response, session_id = generate_response(user_input, session_id)
+    return jsonify({"response": response, "session_id": session_id})
+
+@app.route("/chat", methods=["POST"])
+def chat():
+    data = request.json
+    user_input = data.get("message")
+    session_id = data.get("session_id")
+    response, session_id = generate_response(user_input, session_id)
+    return jsonify({"response": response, "session_id": session_id})
 
 
 # --- your existing ticket lookup endpoint ---

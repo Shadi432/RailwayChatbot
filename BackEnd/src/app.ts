@@ -16,7 +16,7 @@ async function getFareInfo(originStation: string, destinationStation: string) {
   try {
     await driver.manage().setTimeouts({ implicit: 2000 });
     await driver.get(LINK_BR_FARES);
-    
+
     // Appears over the content the first time you open the site.
     const PersonalDataConsentButton = await driver.findElement(By.css("body > div.fc-consent-root > div.fc-dialog-container > div.fc-dialog.fc-choice-dialog > div.fc-footer-buttons-container > div.fc-footer-buttons > button.fc-button.fc-cta-consent.fc-primary-button"));
 
@@ -29,36 +29,44 @@ async function getFareInfo(originStation: string, destinationStation: string) {
     await OriginField.sendKeys(originStation);
     await DestinationField.sendKeys(destinationStation);
     await QueryFaresButton.click();
-      
+
     // Pulling Info from the query results
-    const StandardFareTable: WebElement = await driver.findElement(By.id(WALK_UP_STANDARD_ID));
-    const FareRowsData: WebElement[] = await StandardFareTable.findElements(By.tagName("tr"));
+    try {
+      await driver.wait(until.elementLocated(By.id(WALK_UP_STANDARD_ID)), 5000);
+      const StandardFareTable: WebElement = await driver.findElement(By.id(WALK_UP_STANDARD_ID));
+      const FareRowsData: WebElement[] = await StandardFareTable.findElements(By.tagName("tr"));
 
-    for (let i=0; i<FareRowsData.length; i++){
-      let textValue = await FareRowsData[i].getText();
-      if (textValue.includes("£")) {
-        // ANYTIME RETURN, OFF-PEAK R etc
-        const ticketName = await FareRowsData[i].findElement(By.tagName("a")).findElement(By.tagName("strong")).getText();
+      for (let i=0; i<FareRowsData.length; i++){
+        let textValue = await FareRowsData[i].getText();
+        if (textValue.includes("£")) {
+          // ANYTIME RETURN, OFF-PEAK R etc
+          const ticketName = await FareRowsData[i].findElement(By.tagName("a")).findElement(By.tagName("strong")).getText();
 
-        if (!journeyData[ticketName]){
-          const ticketType = getTicketType(ticketName);
-          if (!ticketType){
-            continue;
-          }
+          if (!journeyData[ticketName]){
+            const ticketType = getTicketType(ticketName);
+            if (!ticketType){
+              continue;
+            }
 
-          journeyData[ticketName] = {TicketType: ticketType, Adult: "505.50"}
-          
-          const ticketFor = await FareRowsData[i].findElements(By.className("tiny"));
+            journeyData[ticketName] = {TicketType: ticketType, Adult: "505.50"}
+            
+            const ticketFor = await FareRowsData[i].findElements(By.className("tiny"));
 
-          for (let adultChild of ticketFor){
-            // Gets the parent of an element
-            let priceForAgeGroup = await adultChild.findElement(By.xpath("./.."));
-            const ticketPricingData: string = await priceForAgeGroup.getText();
-            const ticketPricing: string[] = ticketPricingData.split("\n")
-            journeyData[ticketName][ticketPricing[0]] = ticketPricing[1];
+            for (let adultChild of ticketFor){
+              // Gets the parent of an element
+              let priceForAgeGroup = await adultChild.findElement(By.xpath("./.."));
+              const ticketPricingData: string = await priceForAgeGroup.getText();
+              const ticketPricing: string[] = ticketPricingData.split("\n")
+              journeyData[ticketName][ticketPricing[0]] = ticketPricing[1];
+            }
           }
         }
       }
+    } catch (e) {
+      console.log("Standard fare table not found.");
+      // Optionally return a message or empty result
+      await driver.quit();
+      return { error: "No fare table found for this journey." };
     }
   } catch (err) {
     console.log(err);
