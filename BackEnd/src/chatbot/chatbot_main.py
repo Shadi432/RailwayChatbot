@@ -90,7 +90,9 @@ CONVERSATION_STATES = {
     "PROVIDING_PREDICTION": "PROVIDING_PREDICTION",
     "PROVIDING_TICKET_INFO": "PROVIDING_TICKET_INFO",
     "FOLLOW_UP": "FOLLOW_UP",
-    "GOODBYE": "GOODBYE"
+    "GOODBYE": "GOODBYE",
+    "ASK_SPECIAL_TICKET": "ASK_SPECIAL_TICKET",
+    "COLLECTING_SPECIAL_TICKET": "COLLECTING_SPECIAL_TICKET",
 }
 
 # Create a new conversation session
@@ -307,6 +309,17 @@ def format_ticket_price(journey_info):
             f"{journey_info.get('origin','?')} to {journey_info.get('destination','?')}, "
             f"the price is £{price:.2f}.\nYou can purchase this ticket at the station or online.")
 
+SPECIAL_TICKET_KEYS = {
+    "flexi season": "Flexi Season",
+    "travelcard": "TRAVELCARD 7DS",
+    "off-peak day travelcard": "OFF-PEAK TCDSTD",
+    "carnet": "CARNET SINGLE",
+    "child flatfare": "CHILD FLTFARE R",
+    "season ticket": "SEASON STD",           # Add this line
+    "season std": "SEASON STD"               # Allow direct match as well
+}
+SPECIAL_TICKET_NAMES = list(SPECIAL_TICKET_KEYS.keys())
+
 # function to generate chatbot response with improved conversation capabilities
 def generate_response(user_input, session_id=None):
     if not session_id:
@@ -401,7 +414,23 @@ def generate_response(user_input, session_id=None):
             fares_json = fetch_real_fare(origin, destination)
             if fares_json:
                 ticket_name, price = select_ticket_price(fares_json, conversation["journey_info"])
-                if ticket_name and price:
+                if ticket_name == "NO_SINGLE":
+                    # No single ticket available, ask about return
+                    conversation["journey_info"]["ticket_type"] = "RETURN"
+                    conversation["state"] = "ASK_RETURN_IF_NO_SINGLE"
+                    prompt = "There are no off-peak single tickets available for this journey. Would you like a return ticket instead? (yes/no)"
+                    save_bot_response(session_id, prompt)
+                    return prompt, session_id
+                elif ticket_name == "NO_RETURN":
+                    # No return ticket available, restart
+                    conversation["state"] = CONVERSATION_STATES["GREETING"]
+                    conversation["current_task"] = None
+                    conversation["journey_info"] = {}
+                    prompt = "There are no return tickets available for this journey. Let's start again. Where will you be departing from?"
+                    save_bot_response(session_id, prompt)
+                    return prompt, session_id
+                elif ticket_name and price:
+                    # Normal flow
                     ticket_info = (
                         f"For a {conversation['journey_info'].get('ticket_age','ADULT').lower()} "
                         f"{conversation['journey_info'].get('ticket_time','ANYTIME').lower()} "
@@ -517,34 +546,52 @@ def fetch_real_fare(origin, destination):
         return None
 
 def select_ticket_price(fares_json, journey_info):
-    ticket_type = journey_info.get("ticket_type", "").upper()  # SINGLE/RETURN
-    ticket_time = journey_info.get("ticket_time", "").upper()  # OFF-PEAK/ANYTIME
-    ticket_age = journey_info.get("ticket_age", "ADULT").capitalize()  # Adult/Child
+    ticket_age = journey_info.get("ticket_age", "ADULT").capitalize()
+    special_ticket = journey_info.get("special_ticket")
 
-    candidates = []
+    # If user requested a special ticket, only show that
+    if special_ticket:
+        key = SPECIAL_TICKET_KEYS.get(special_ticket.lower())
+        if key and key in fares_json:
+            ticket = fares_json[key]
+            price = ticket.get(ticket_age)
+            if price:
+                return key, price
+        return None, None
+
+    # Otherwise, exclude special tickets from candidates
+    exclude_keys = set(SPECIAL_TICKET_KEYS.values())
+    ticket_type = journey_info.get("ticket_type", "").upper()
+    ticket_time = journey_info.get("ticket_time", "").upper()
+
+    # Try to find the requested ticket
     if ticket_type == "SINGLE":
-        if ticket_time == "OFF-PEAK":
-            candidates.append("OFF-PEAK S")
-        if ticket_time == "ANYTIME":
-            candidates.append("ANYTIME S")
-    elif ticket_type == "RETURN":
-        if ticket_time == "OFF-PEAK":
-            candidates.append("OFF-PEAK R")
-        if ticket_time == "ANYTIME":
-            candidates.append("ANYTIME R")
-    candidates += ["FLEXI SEASON", "TRAVELCARD 7DS", "CHILD FLTFARE R", "CARNET SINGLE"]
-
-    for name in candidates:
+        candidate = "OFF-PEAK S" if ticket_time == "OFF-PEAK" else "ANYTIME S"
         for key in fares_json:
-            if name in key.upper():
+            if candidate in key.upper() and key not in exclude_keys:
                 ticket = fares_json[key]
                 price = ticket.get(ticket_age)
                 if price:
                     return key, price
+        # If not found, return special marker
+        return "NO_SINGLE", None
+
+    elif ticket_type == "RETURN":
+        candidate = "OFF-PEAK R" if ticket_time == "OFF-PEAK" else "ANYTIME R"
+        for key in fares_json:
+            if candidate in key.upper() and key not in exclude_keys:
+                ticket = fares_json[key]
+                price = ticket.get(ticket_age)
+                if price:
+                    return key, price
+        return "NO_RETURN", None
+
+    # Fallback: any non-special ticket
     for key, ticket in fares_json.items():
-        price = ticket.get(ticket_age)
-        if price:
-            return key, price
+        if key not in exclude_keys:
+            price = ticket.get(ticket_age)
+            if price:
+                return key, price
     return None, None
 
 # Run chatbot with improved conversation flow
