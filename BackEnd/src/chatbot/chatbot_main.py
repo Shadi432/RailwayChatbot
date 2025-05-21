@@ -9,6 +9,7 @@ from train_chatbot import predict_delay_from_input
 from extra_features import get_train_crowd_info, get_random_weather
 from nlpprocessor import JourneyExtractor  # Import JourneyExtractor for NLP
 from flask import jsonify  # Import jsonify for Flask response
+from station_dicts import STATION_CODES, STATION_NAME_TO_CODE  # <-- Make sure this import is at the top
 
 warnings.filterwarnings("ignore")  # Suppress warnings
 
@@ -242,23 +243,65 @@ def generate_collecting_question(missing_field, journey_info):
 
 # Updated handle_direct_answer function
 def handle_direct_answer(user_input, conversation):
-    """Handle direct answers to specific questions based on conversation state."""
     state = conversation["state"]
     user_input_original = user_input.strip()
-    user_input = user_input_original.upper()
-    
-    # Make sure journey_info exists
+    user_input_upper = user_input_original.upper()
+    user_input_lower = user_input_original.lower()
+
     if not conversation.get("journey_info"):
         conversation["journey_info"] = {}
-    
-    # Handle different collection states
+
+    # Helper: Find all station names that contain the user's input
+    def find_station_options(query):
+        return [(name, STATION_NAME_TO_CODE[name]) for name in STATION_NAME_TO_CODE if query in name]
+
+    # Handle origin
     if state == CONVERSATION_STATES["COLLECTING_ORIGIN"]:
-        conversation["journey_info"]["origin"] = user_input
-        return True
-        
+        if user_input_upper in STATION_CODES:
+            conversation["journey_info"]["origin"] = user_input_upper
+            return True
+        elif user_input_lower in STATION_NAME_TO_CODE:
+            conversation["journey_info"]["origin"] = STATION_NAME_TO_CODE[user_input_lower]
+            return True
+        else:
+            # Try to find partial matches
+            matches = find_station_options(user_input_lower)
+            if matches:
+                options = "\n".join(f"- {name.title()} ({code})" for name, code in matches)
+                conversation["last_message"] = (
+                    f"Please be more specific. Did you mean one of these stations?\n{options}\n"
+                    "Please type the full station name or code."
+                )
+                return False   # <-- ADD THIS LINE
+            else:
+                conversation["last_message"] = (
+                    "Please enter a valid station code or station name for your departure (e.g., LST or London Liverpool Street)."
+                )
+                return False
+
+    # Handle destination
     elif state == CONVERSATION_STATES["COLLECTING_DESTINATION"]:
-        conversation["journey_info"]["destination"] = user_input
-        return True
+        if user_input_upper in STATION_CODES:
+            conversation["journey_info"]["destination"] = user_input_upper
+            return True
+        elif user_input_lower in STATION_NAME_TO_CODE:
+            conversation["journey_info"]["destination"] = STATION_NAME_TO_CODE[user_input_lower]
+            return True
+        else:
+            # Try to find partial matches
+            matches = find_station_options(user_input_lower)
+            if matches:
+                options = "\n".join(f"- {name.title()} ({code})" for name, code in matches)
+                conversation["last_message"] = (
+                    f"Please be more specific. Did you mean one of these stations?\n{options}\n"
+                    "Please type the full station name or code."
+                )
+                return False   # <-- ADD THIS LINE
+            else:
+                conversation["last_message"] = (
+                    "Please enter a valid station code or station name for your destination (e.g., NRW or Norwich)."
+                )
+            return False
         
     elif state == CONVERSATION_STATES["COLLECTING_TIME"]:
         conversation["journey_info"]["departure_time"] = user_input
@@ -395,7 +438,7 @@ def generate_response(user_input, session_id=None):
             response = f"Here's the delay prediction for your journey:\n\n{delay}\n\nAnything else I can help with?"
             save_bot_response(session_id, response)
             return response, session_id
-        # Otherwise, treat as a new query (reset state and continue)
+        # Otherwise, treat as a new query (reset and continue)
         else:
             conversation["state"] = CONVERSATION_STATES["GREETING"]
             conversation["current_task"] = None
@@ -664,6 +707,11 @@ if __name__ == "__main__":
             break
             
         response, session_id = generate_response(user_input, session_id)
-        print(f"Bot: {response}")
+        # Get the conversation object
+        conversation = active_conversations[session_id]
+        if conversation.get("last_message"):
+            print(f"Bot: {conversation['last_message']}")
+        else:
+            print(f"Bot: {response}")
 
 
