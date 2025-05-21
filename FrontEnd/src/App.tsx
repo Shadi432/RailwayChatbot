@@ -23,7 +23,7 @@ function App() {
     .then((response) => {
       setBotResponse(response.data["response"]);
       setSessionId(response.data["session_id"]); // <-- Store session_id for next turn
-      setUserInput(""); // <-- This will clear the input bar after sending
+      setUserInput(""); // <-- This clears the input bar after sending
     })
     .catch((err) => {
       console.log(err);

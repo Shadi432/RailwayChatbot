@@ -4,6 +4,7 @@ import re
 import uuid
 import time
 import warnings
+import requests
 from train_chatbot import predict_delay_from_input
 from extra_features import get_train_crowd_info, get_random_weather
 from nlpprocessor import JourneyExtractor  # Import JourneyExtractor for NLP
@@ -394,7 +395,24 @@ def generate_response(user_input, session_id=None):
         conversation["missing_fields"] = missing_fields
         if not missing_fields:
             conversation["state"] = CONVERSATION_STATES["PROVIDING_TICKET_INFO"]
-            ticket_info = format_ticket_price(conversation["journey_info"])
+            # Fetch real fares
+            origin = conversation["journey_info"]["origin"]
+            destination = conversation["journey_info"]["destination"]
+            fares_json = fetch_real_fare(origin, destination)
+            if fares_json:
+                ticket_name, price = select_ticket_price(fares_json, conversation["journey_info"])
+                if ticket_name and price:
+                    ticket_info = (
+                        f"For a {conversation['journey_info'].get('ticket_age','ADULT').lower()} "
+                        f"{conversation['journey_info'].get('ticket_time','ANYTIME').lower()} "
+                        f"{conversation['journey_info'].get('ticket_type','SINGLE').lower()} ticket "
+                        f"({ticket_name}) from {origin} to {destination}, the price is {price}."
+                    )
+                else:
+                    ticket_info = "Sorry, I couldn't find a matching ticket for your request."
+            else:
+                ticket_info = "Sorry, I couldn't fetch fare information at this time."
+
             random_followup = random.choice([
                 "Would you like to check for delays on this route?",
                 "Is there anything else you'd like to know about this journey?",
@@ -482,6 +500,52 @@ def generate_response(user_input, session_id=None):
                 "• Will my train from Manchester to Liverpool be delayed tomorrow morning?")
     save_bot_response(session_id, response)
     return response, session_id
+
+def fetch_real_fare(origin, destination):
+    url = f"http://localhost:3000/?originStation={origin}&destinationStation={destination}"
+    try:
+        resp = requests.get(url, timeout=15)
+        print(f"Fetching fares from: {url}")
+        print(f"Status code: {resp.status_code}")
+        print(f"Response text: {resp.text}")
+        if resp.status_code == 200:
+            return resp.json()
+        else:
+            return None
+    except Exception as e:
+        print(f"Error fetching fares: {e}")
+        return None
+
+def select_ticket_price(fares_json, journey_info):
+    ticket_type = journey_info.get("ticket_type", "").upper()  # SINGLE/RETURN
+    ticket_time = journey_info.get("ticket_time", "").upper()  # OFF-PEAK/ANYTIME
+    ticket_age = journey_info.get("ticket_age", "ADULT").capitalize()  # Adult/Child
+
+    candidates = []
+    if ticket_type == "SINGLE":
+        if ticket_time == "OFF-PEAK":
+            candidates.append("OFF-PEAK S")
+        if ticket_time == "ANYTIME":
+            candidates.append("ANYTIME S")
+    elif ticket_type == "RETURN":
+        if ticket_time == "OFF-PEAK":
+            candidates.append("OFF-PEAK R")
+        if ticket_time == "ANYTIME":
+            candidates.append("ANYTIME R")
+    candidates += ["FLEXI SEASON", "TRAVELCARD 7DS", "CHILD FLTFARE R", "CARNET SINGLE"]
+
+    for name in candidates:
+        for key in fares_json:
+            if name in key.upper():
+                ticket = fares_json[key]
+                price = ticket.get(ticket_age)
+                if price:
+                    return key, price
+    for key, ticket in fares_json.items():
+        price = ticket.get(ticket_age)
+        if price:
+            return key, price
+    return None, None
 
 # Run chatbot with improved conversation flow
 if __name__ == "__main__":

@@ -24,7 +24,6 @@ def chatbot():
     response, session_id = generate_response(user_input, session_id)
     return jsonify({"response": response, "session_id": session_id})
 
-
 @app.route("/chat", methods=["POST"])
 def chat():
     data = request.json
