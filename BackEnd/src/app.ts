@@ -70,7 +70,7 @@ async function getFareInfo(originStation: string, destinationStation: string) {
 }
 
 app.get('/', async (req, res) => {
-  const ticketInfo = await getFareInfo(req.query.originStation.toString(), req.query.destinationStation.toString());
+  const ticketInfo = await getFareInfo(`${req.query.originStation}`, `${req.query.destinationStation}`);
   res.send(ticketInfo);
 });
 
