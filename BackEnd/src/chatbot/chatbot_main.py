@@ -328,6 +328,43 @@ def generate_response(user_input, session_id=None):
     intent_tag = match_intent(user_input)
     direct_answer_handled = handle_direct_answer(user_input, conversation)
 
+    # --- Handle special ticket prompt state ---
+    if conversation["state"] == CONVERSATION_STATES["ASK_SPECIAL_TICKET"]:
+        if user_input.strip().lower() in ["yes", "y"]:
+            conversation["state"] = CONVERSATION_STATES["COLLECTING_SPECIAL_TICKET"]
+            prompt = (
+                "Which special ticket do you need? (Flexi Season, Travelcard, Carnet Single, "
+                "Off-Peak Day Travelcard, Child Flatfare, Season Ticket)"
+            )
+            save_bot_response(session_id, prompt)
+            return prompt, session_id
+        elif user_input.strip().lower() in ["no", "n"]:
+            conversation["journey_info"]["special_ticket"] = None
+            conversation["state"] = CONVERSATION_STATES["PROVIDING_TICKET_INFO"]
+            # Continue to price selection below (let the rest of the function run)
+        else:
+            prompt = "Please answer 'yes' or 'no'. Do you need a special ticket type?"
+            save_bot_response(session_id, prompt)
+            return prompt, session_id
+
+    if conversation["state"] == CONVERSATION_STATES["COLLECTING_SPECIAL_TICKET"]:
+        normalized = None
+        for name in SPECIAL_TICKET_NAMES:
+            if name in user_input.lower():
+                normalized = name
+                break
+        if normalized:
+            conversation["journey_info"]["special_ticket"] = normalized
+            conversation["state"] = CONVERSATION_STATES["PROVIDING_TICKET_INFO"]
+            # Continue to price selection below (let the rest of the function run)
+        else:
+            prompt = (
+                "Sorry, I didn't recognize that special ticket. Please choose from: "
+                "Flexi Season, Travelcard, Carnet Single, Off-Peak Day Travelcard, Child Flatfare, Season Ticket."
+            )
+            save_bot_response(session_id, prompt)
+            return prompt, session_id
+
     # --- Handle FOLLOW_UP state ---
     if conversation["state"] == CONVERSATION_STATES["FOLLOW_UP"]:
         if user_input.strip().lower() in ["no", "no thanks", "nothing", "that's all", "exit", "bye", "goodbye"]:
@@ -407,6 +444,14 @@ def generate_response(user_input, session_id=None):
         missing_fields = get_missing_ticket_fields(conversation.get("journey_info", {}))
         conversation["missing_fields"] = missing_fields
         if not missing_fields:
+            if "special_ticket" not in conversation["journey_info"]:
+                conversation["state"] = CONVERSATION_STATES["ASK_SPECIAL_TICKET"]
+                prompt = (
+                    "Do you need a special ticket type such as Flexi Season, Travelcard, Carnet Single, "
+                    "Off-Peak Day Travelcard, Child Flatfare, or Season Ticket? (yes/no)"
+                )
+                save_bot_response(session_id, prompt)
+                return prompt, session_id
             conversation["state"] = CONVERSATION_STATES["PROVIDING_TICKET_INFO"]
             # Fetch real fares
             origin = conversation["journey_info"]["origin"]
