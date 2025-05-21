@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import axios from 'axios';
 
 function App() {
   const [userInput, setUserInput] = useState('');
@@ -7,24 +8,17 @@ function App() {
 
   // handle the submit button click
   const handleSubmit = async () => {
-    if (!userInput.trim()) return;
+    const trimmedInput = userInput.trim();
     setLoading(true);
 
-    try {
-      const response = await fetch('http://localhost:5000/chatbot', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userInput }),
-      });
-
-      const data = await response.json();
-      setBotResponse(data.response || 'No response from server.');
-    } catch (error) {
-      setBotResponse('Error communicating with server.');
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
+    await axios.post('http://localhost:5000/chatbot', {message: trimmedInput}, {
+      headers: {
+        "Content-Type": "application/json"
+      }
+    })
+    .then((response) => {console.log(response.data["response"]); setBotResponse(response.data["response"])})
+    .catch((err) => {console.log(err); setBotResponse('Error communicating with server.');})
+    .finally(() => setLoading(false));
   };
 
   return (
@@ -48,7 +42,7 @@ function App() {
         {loading ? 'Thinking...' : 'Ask'}
       </button>
 
-      <div style={{ marginTop: '20px', backgroundColor: '#f5f5f5', padding: '15px', borderRadius: '5px' }}>
+      <div style={{ marginTop: '20px', backgroundColor: '#574f4f', padding: '15px', borderRadius: '5px' }}>
         {botResponse && <p><strong>Bot:</strong> {botResponse}</p>}
       </div>
     </div>
