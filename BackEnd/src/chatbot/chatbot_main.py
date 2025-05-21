@@ -74,6 +74,14 @@ intents = {
             "responses": [
                 "I can help you with:\n• Train delay predictions\n• Ticket price information\n• Journey planning\n\nJust ask me questions like:\n'Will my train from London to Manchester be delayed?'\n'How much is an adult single ticket from Norwich to London?'\n'What's the price of an off-peak return to Birmingham?'"
             ]
+        },
+        {
+            "tag": "book_ticket",
+            "patterns": [
+                "book", "buy", "purchase", "reserve", "get ticket",
+                "i need to book a ticket", "i want to book", "can i book", "book a train", "book a ticket"
+            ],
+            "responses": []
         }
     ]
 }
@@ -140,6 +148,10 @@ def match_intent(user_input):
         for pattern in intent["patterns"]:
             if pattern in user_input:
                 return intent["tag"]
+
+    # Enhanced detection for booking
+    if any(word in user_input for word in ["book", "buy", "purchase", "reserve", "get ticket"]):
+        return "book_ticket"
 
     # Enhanced detection for ticket price queries
     if any(word in user_input for word in ["ticket", "price", "cost", "fare", "how much", "cheap"]):
@@ -474,6 +486,15 @@ def generate_response(user_input, session_id=None):
         save_bot_response(session_id, response)
         return response, session_id
     
+    elif intent_tag == "book_ticket":
+        booking_url = f"https://brfares.com"
+        response = (
+        f"Great! You can book your ticket directly at this link:\n{booking_url}\n"
+        "Click the link to continue your booking."
+        )
+        save_bot_response(session_id, response)
+        return response, session_id
+    
     # --- Ticket price intent ---
     if (
         intent_tag == "ticket_price"
@@ -519,11 +540,13 @@ def generate_response(user_input, session_id=None):
                     return prompt, session_id
                 elif ticket_name and price:
                     # Normal flow
+                    booking_url = f"https://www.brfares.com/#!fares?orig={origin}&dest={destination}"
                     ticket_info = (
                         f"For a {conversation['journey_info'].get('ticket_age','ADULT').lower()} "
                         f"{conversation['journey_info'].get('ticket_time','ANYTIME').lower()} "
                         f"{conversation['journey_info'].get('ticket_type','SINGLE').lower()} ticket "
-                        f"({ticket_name}) from {origin} to {destination}, the price is {price}."
+                        f"({ticket_name}) from {origin} to {destination}, the price is {price}.\n"
+                        f"You can book this ticket here: {booking_url}"
                     )
                 else:
                     ticket_info = "Sorry, I couldn't find a matching ticket for your request."
