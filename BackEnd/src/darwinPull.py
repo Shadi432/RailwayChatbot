@@ -20,6 +20,8 @@ DATA_OUTPUT_NAME = "trainUpdates.dat"
 SUFFIX_TAG_INDEX = -14
 RID_LENGTH = 15
 
+AZURE_CONNECTION_STRING = "Driver={ODBC Driver 18 for SQL Server};Server=tcp:m-b-fofana.database.windows.net,1433;Database=DemonstrationDatabase;Uid=Shadi432;Pwd=Shadow432;Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
+
 SCHEDULE_ENTRIES = ("OR", "IP", "PP", "DT")
 TAGS_LIST = {
     "<ns5:pass": "wtp",
@@ -34,6 +36,9 @@ SSD_FIELD = 'ssd="'
 FTP_HOSTNAME = os.getenv("FTP_HOSTNAME")
 FTP_USERNAME = os.getenv("FTP_USERNAME")
 FTP_PASSWORD = os.getenv("FTP_PASSWORD")
+
+# Determine run mode for demonstration
+ProcessDataMode = True
 
 # [rid] = True
 ridCache = {}
@@ -77,10 +82,10 @@ def ungzipFile(zippedFilename, outputFilename):
 # Get the rid of the schedule
 # Use that rid to get all related records to this schedule
 def GetRecordsFromRid(rid):
-    GET_BY_RID_QUERY = f"SELECT * FROM [JourneyDump].[dbo].[JourneyData] WHERE Rid='{rid}'"
+    GET_BY_RID_QUERY = f"SELECT * FROM JourneyData WHERE Rid='{rid}'"
     recordList = []
     try:
-        connection = pyodbc.connect("DSN=TrainDB;")
+        connection = pyodbc.connect(AZURE_CONNECTION_STRING)
     except pyodbc.Error as ex:
         print(ex)
     
@@ -191,12 +196,12 @@ def GetDelayedStationData(schedule):
     return returnList
 
 def GetStoredSchedulesList():
-    GET_ALL_SCHEDULES_QUERY = "SELECT * FROM [JourneyDump].[dbo].[JourneyData] WHERE RecordType='schedule'"
+    GET_ALL_SCHEDULES_QUERY = "SELECT * FROM JourneyData WHERE RecordType='schedule'"
 
     storedSchedulesList = []
 
     try:
-        connection = pyodbc.connect("DSN=TrainDB;")
+        connection = pyodbc.connect(AZURE_CONNECTION_STRING)
     except pyodbc.Error as ex:
         print(ex)
     
@@ -250,7 +255,7 @@ def sendTrainDataToDB(rid, informationType, data, relatedRid):
     sectionedData = partitionString(data, 5, 4000)
 
     try:
-        connection = pyodbc.connect("DSN=TrainDB;")
+        connection = pyodbc.connect(AZURE_CONNECTION_STRING)
     except pyodbc.Error as ex:
         print(ex)
     
@@ -269,7 +274,14 @@ def sendTrainDataToDB(rid, informationType, data, relatedRid):
         print(err)
     
     cursor.commit()
-    
+
+def getDelayDataFromSchedulesList(schedulesList):
+    with open("dataFile.txt", "a") as file:
+        for schedule in schedulesList:
+            delayedStationData = GetDelayedStationData(schedule)
+            if delayedStationData != []:
+                for stopData in delayedStationData:
+                    file.write(f"{",".join(stopData)}\n")
 
 def processXML():
     with open(DATA_OUTPUT_NAME, "r+") as file:
@@ -307,65 +319,71 @@ def processXML():
 
 def job():
     getMostRecentDarwinFile()
+    print("Darwin Pull Finished")
     ungzipFile(ZIPPED_OUTPUT_NAME, DATA_OUTPUT_NAME)
 
     startTime = datetime.datetime.now()
     processXML()
+    print("XML processing Finished")
     endTime = datetime.datetime.now()
     diff = endTime-startTime
     print(f"Time taken to process: {diff}")
     # Cleanup UNCOMMENT FOR FINAL VERSION
-    os.remove(DATA_OUTPUT_NAME)
+    # os.remove(DATA_OUTPUT_NAME)
 
-# if __name__ == '__main__':
-#     # Init for testing so that file remains after program execution for inspection
-#     if os.path.isfile(DATA_OUTPUT_NAME):
-#         os.remove(DATA_OUTPUT_NAME)
-#     # Init
-#     try:
-#         connection = pyodbc.connect("DSN=TrainDB;")
-#         with connection:
-#             cursor = connection.cursor()
-#             DELETE_ALL_TABLES_QUERY="DROP TABLE JourneyData;DROP TABLE Trains;"
-#             CREATE_ALL_TABLES_QUERY="""CREATE TABLE Trains (Rid varchar(15) NOT NULL PRIMARY KEY,);
-#                 CREATE TABLE JourneyData (
-#                     DataId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
 
-#                     Rid varchar(15) NOT NULL REFERENCES Trains(Rid),
-#                     RelatedRid varchar(15),
-#                     RecordType varchar(20),
-#                     DataField1 varchar(4000),
-#                     DataField2 varchar(4000),
-#                     DataField3 varchar(4000),
-#                     DataField4 varchar(4000),
-#                     DataField5 varchar(4000));"""
-#             cursor.execute(f"{DELETE_ALL_TABLES_QUERY};{CREATE_ALL_TABLES_QUERY};")
-#             # Need everything cleared out here, all table data removed.
-#     except pyodbc.Error as ex:
-#         print(ex)
+if (ProcessDataMode):
+    schedulesList = GetStoredSchedulesList()
+    getDelayDataFromSchedulesList(schedulesList)
 
-    
+    print("Processing the stored data completed. Stored in dataFile.txt")
+else:
+    if __name__ == "__main__":
+        # Init for testing so that file remains after program execution for inspection
+        if os.path.isfile(DATA_OUTPUT_NAME):
+            os.remove(DATA_OUTPUT_NAME)
+        # Init
+        try:
+            connection = pyodbc.connect(AZURE_CONNECTION_STRING)
+            with connection:
+                cursor = connection.cursor()
+                DELETE_ALL_TABLES_QUERY="DROP TABLE JourneyData;DROP TABLE Trains;"
+                CREATE_ALL_TABLES_QUERY="""CREATE TABLE Trains (Rid varchar(15) NOT NULL PRIMARY KEY,);
+                    CREATE TABLE JourneyData (
+                        DataId int IDENTITY(1,1) NOT NULL PRIMARY KEY,
 
-#     endTime = datetime.datetime.now() + datetime.timedelta(minutes=RUNTIME_LENGTH_MINUTES)
+                        Rid varchar(15) NOT NULL REFERENCES Trains(Rid),
+                        RelatedRid varchar(15),
+                        RecordType varchar(20),
+                        DataField1 varchar(4000),
+                        DataField2 varchar(4000),
+                        DataField3 varchar(4000),
+                        DataField4 varchar(4000),
+                        DataField5 varchar(4000));"""
+                cursor.execute(f"{DELETE_ALL_TABLES_QUERY};{CREATE_ALL_TABLES_QUERY};")
+                # Need everything cleared out here, all table data removed.
+        except pyodbc.Error as ex:
+            print(ex)
 
-#     while endTime > datetime.datetime.now():
-#         # Pass off the job to another processor 
-#         with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
-#             future = executor.submit(job)
-            
-#         print("Pull completed beginning wait for next Darwin update...")
-#         time.sleep(DARWIN_PULL_INTERVAL)
-#         iterationCount += 1
-#         print(f"Iteration Count: {iterationCount}")
-#     print("Pull from Darwin phase completed... Beginning processing the stored data")
+        
 
-schedulesList = GetStoredSchedulesList()
+        endTime = datetime.datetime.now() + datetime.timedelta(minutes=RUNTIME_LENGTH_MINUTES)
 
-with open("dataFile.txt", "a") as file:
-    for schedule in schedulesList:
-        delayedStationData = GetDelayedStationData(schedule)
-        if delayedStationData != []:
-            for stopData in delayedStationData:
-                file.write(f"{",".join(stopData)}\n")
+        while endTime > datetime.datetime.now():
+            # Pass off the job to another processor 
+            with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(job)
+                
+            print("Pull completed beginning wait for next Darwin update...")
+            time.sleep(DARWIN_PULL_INTERVAL)
+            iterationCount += 1
+            print(f"Iteration Count: {iterationCount}")
+        print("Pull from Darwin phase completed... Beginning processing the stored data")
 
-print("Processing the stored data completed. Stored in dataFile.txt")
+        schedulesList = GetStoredSchedulesList()
+
+        getDelayDataFromSchedulesList(schedulesList)
+
+
+
+
