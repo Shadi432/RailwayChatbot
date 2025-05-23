@@ -22,6 +22,7 @@ BackEnd/venv
 # Generated Webscraping Files
 data.gzip
 trainUpdates.dat
+dataFile.txt
 
 
 # Editor directories and files
