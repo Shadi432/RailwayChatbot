@@ -1,15 +1,16 @@
-import { useState } from 'react';
+import { CSSProperties, useState } from 'react';
 import axios from 'axios';
 
-const boxStyling = {
+const boxStyling: CSSProperties = {
    marginTop: '20px',
    backgroundColor: '#574f4f',
    padding: '15px',
    borderRadius: '5px', 
    width: "50vw",
    height: "25vh",
-   overflowY: "scroll",
-  }
+   overflowY: "scroll"
+}
+
 function App() {
   const [userInput, setUserInput] = useState('');
   const [botResponse, setBotResponse]: any = useState([]);
