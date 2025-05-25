@@ -1,11 +1,21 @@
 import { useState } from 'react';
 import axios from 'axios';
 
+const boxStyling = {
+   marginTop: '20px',
+   backgroundColor: '#574f4f',
+   padding: '15px',
+   borderRadius: '5px', 
+   width: "50vw",
+   height: "25vh",
+   overflowY: "scroll",
+  }
 function App() {
   const [userInput, setUserInput] = useState('');
-  const [botResponse, setBotResponse] = useState('');
+  const [botResponse, setBotResponse]: any = useState([]);
   const [loading, setLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null); // <-- Add this
+
 
   // handle the submit button click
   const handleSubmit = async () => {
@@ -21,7 +31,7 @@ function App() {
       }
     )
     .then((response) => {
-      setBotResponse(response.data["response"]);
+      setBotResponse([...botResponse,response.data["response"]]);
       setSessionId(response.data["session_id"]); // <-- Store session_id for next turn
       setUserInput(""); // <-- This clears the input bar after sending
     })
@@ -53,8 +63,8 @@ function App() {
         {loading ? 'Thinking...' : 'Ask'}
       </button>
 
-      <div style={{ marginTop: '20px', backgroundColor: '#574f4f', padding: '15px', borderRadius: '5px' }}>
-        {botResponse && <p><strong>Bot:</strong> {botResponse}</p>}
+      <div style={boxStyling}>
+        { [...botResponse].reverse().map((response: string) => <p><strong>Bot:</strong> {response} </p>)}
       </div>
     </div>
   );
